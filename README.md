@@ -23,18 +23,9 @@ cd GitHub-2-Codeberg
 
 ## Usage
 
-1. Configure your GitHub and Codeberg credentials
-2. Run the migration script
+1. Run script with `--help`
+2. Start the migration
 3. Verify your repositories on Codeberg
-
-## Configuration
-
-Create a configuration file or set environment variables:
-
-```bash
-export GITHUB_TOKEN="your_github_token"
-export CODEBERG_TOKEN="your_codeberg_token"
-```
 
 ## Contributing
 
