@@ -358,6 +358,7 @@ display_config() {
 # Interactive Commit Editor
 #-------------------------------------------------------------------------------
 declare -A COMMIT_OVERRIDES
+declare -A COMMIT_MESSAGES
 
 interactive_edit() {
   log_header "Interactive Commit Editing"
@@ -413,19 +414,26 @@ interactive_edit() {
     echo -e "  ${CYAN}Date:${NC}       $author_date"
     echo -e "  ${CYAN}Message:${NC}    $message"
     echo ""
+    # Check if message has been customized
+    local msg_status="(unchanged)"
+    if [[ -v COMMIT_MESSAGES["$commit_hash"] ]]; then
+      msg_status="${YELLOW}(customized)${NC}"
+    fi
     echo -e "  ${BOLD}Default changes:${NC}"
-    echo -e "    Name:  $author_name → $NEW_NAME"
-    echo -e "    Email: $author_email → $NEW_EMAIL"
+    echo -e "    Name:    $author_name → $NEW_NAME"
+    echo -e "    Email:   $author_email → $NEW_EMAIL"
+    echo -e "    Message: $msg_status"
     echo ""
 
     while true; do
-      echo -e "  ${YELLOW}[E]dit${NC} - Customize changes for this commit"
+      echo -e "  ${YELLOW}[E]dit${NC} - Customize name/email for this commit"
+      echo -e "  ${YELLOW}[M]essage${NC} - Edit commit message"
       echo -e "  ${GREEN}[A]pply${NC} - Apply default changes"
       echo -e "  ${BLUE}[S]kip${NC} - Keep original (no changes)"
       echo -e "  ${CYAN}[D]efault all${NC} - Apply default to all remaining"
       echo -e "  ${RED}[Q]uit${NC} - Stop and apply changes made so far"
       echo ""
-      read -r -p "  Choice [E/A/S/D/Q]: " choice </dev/tty
+      read -r -p "  Choice [E/A/M/S/D/Q]: " choice </dev/tty
       echo ""
 
       case "${choice^^}" in
@@ -438,12 +446,28 @@ interactive_edit() {
         custom_email="${custom_email:-$NEW_EMAIL}"
 
         COMMIT_OVERRIDES["$commit_hash"]="$custom_name|$custom_email"
-        log_success "Custom changes saved for commit ${commit_hash:0:12}"
-        break
+        log_success "Custom name/email saved for commit ${commit_hash:0:12}"
+        echo ""
+        ;;
+      M)
+        echo ""
+        echo -e "  ${CYAN}Current message:${NC}"
+        echo -e "    $message"
+        echo ""
+        echo -e "  ${CYAN}Enter new commit message (or press Enter to keep current):${NC}"
+        read -r custom_message </dev/tty
+        
+        if [[ -n "$custom_message" ]]; then
+          COMMIT_MESSAGES["$commit_hash"]="$custom_message"
+          log_success "Custom message saved for commit ${commit_hash:0:12}"
+        else
+          log_info "Keeping original message for commit ${commit_hash:0:12}"
+        fi
+        echo ""
         ;;
       A)
         COMMIT_OVERRIDES["$commit_hash"]="$NEW_NAME|$NEW_EMAIL"
-        log_success "Default changes will be applied to commit ${commit_hash:0:12}"
+        log_success "Changes will be applied to commit ${commit_hash:0:12}"
         break
         ;;
       S)
@@ -465,7 +489,7 @@ interactive_edit() {
         return
         ;;
       *)
-        log_warning "Invalid choice. Please select E, A, S, D, or Q."
+        log_warning "Invalid choice. Please select E, M, A, S, D, or Q."
         ;;
       esac
     done
@@ -512,6 +536,52 @@ EOF
 
   chmod +x "$filter_script"
   echo "$filter_script"
+}
+
+#-------------------------------------------------------------------------------
+# Generate Message Filter Script for Interactive Mode
+#-------------------------------------------------------------------------------
+generate_message_filter() {
+  local msg_filter_script="$TEMP_DIR/msg_filter.sh"
+
+  cat >"$msg_filter_script" <<'MSG_FILTER_HEADER'
+#!/usr/bin/env bash
+# Read the original message from stdin
+original_msg=$(cat)
+MSG_FILTER_HEADER
+
+  # Check if there are any custom messages
+  if [[ ${#COMMIT_MESSAGES[@]} -gt 0 ]]; then
+    echo 'case "$GIT_COMMIT" in' >>"$msg_filter_script"
+
+    for commit_hash in "${!COMMIT_MESSAGES[@]}"; do
+      local custom_msg="${COMMIT_MESSAGES[$commit_hash]}"
+      # Escape special characters for shell
+      custom_msg="${custom_msg//\\/\\\\}"
+      custom_msg="${custom_msg//\"/\\\"}"
+      custom_msg="${custom_msg//\$/\\\$}"
+      custom_msg="${custom_msg//\`/\\\`}"
+
+      cat >>"$msg_filter_script" <<EOF
+    $commit_hash)
+        echo "$custom_msg"
+        ;;
+EOF
+    done
+
+    cat >>"$msg_filter_script" <<'MSG_FILTER_DEFAULT'
+    *)
+        echo "$original_msg"
+        ;;
+esac
+MSG_FILTER_DEFAULT
+  else
+    # No custom messages, just pass through
+    echo 'echo "$original_msg"' >>"$msg_filter_script"
+  fi
+
+  chmod +x "$msg_filter_script"
+  echo "$msg_filter_script"
 }
 
 #-------------------------------------------------------------------------------
@@ -583,22 +653,42 @@ FILTER_LOGIC
 rewrite_commits_interactive() {
   log_header "Rewriting Commit History (Interactive)"
 
-  if [[ ${#COMMIT_OVERRIDES[@]} -eq 0 ]]; then
+  if [[ ${#COMMIT_OVERRIDES[@]} -eq 0 && ${#COMMIT_MESSAGES[@]} -eq 0 ]]; then
     log_warning "No commits selected for modification"
     return
   fi
 
-  log_info "Applying ${#COMMIT_OVERRIDES[@]} commit modification(s)..."
+  local total_changes=$((${#COMMIT_OVERRIDES[@]} + ${#COMMIT_MESSAGES[@]}))
+  log_info "Applying $total_changes commit modification(s)..."
+  
+  if [[ ${#COMMIT_OVERRIDES[@]} -gt 0 ]]; then
+    log_info "  - ${#COMMIT_OVERRIDES[@]} author/email change(s)"
+  fi
+  if [[ ${#COMMIT_MESSAGES[@]} -gt 0 ]]; then
+    log_info "  - ${#COMMIT_MESSAGES[@]} message change(s)"
+  fi
 
-  # Generate filter script
-  local filter_script
+  # Generate filter scripts
+  local filter_script msg_filter_script
   filter_script=$(generate_interactive_filter)
+  msg_filter_script=$(generate_message_filter)
 
-  # Apply using filter-branch
-  git filter-branch -f --env-filter "source $filter_script" --tag-name-filter cat -- --all
+  # Build filter-branch command with both filters
+  # Use msg-filter only if there are message changes
+  if [[ ${#COMMIT_MESSAGES[@]} -gt 0 ]]; then
+    git filter-branch -f \
+      --env-filter "source $filter_script" \
+      --msg-filter "source $msg_filter_script" \
+      --tag-name-filter cat -- --all
+  else
+    git filter-branch -f \
+      --env-filter "source $filter_script" \
+      --tag-name-filter cat -- --all
+  fi
 
   log_success "Commit history rewritten successfully"
 }
+
 
 #-------------------------------------------------------------------------------
 # Handle Commit Signing
