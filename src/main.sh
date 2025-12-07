@@ -425,14 +425,14 @@ interactive_edit() {
       echo -e "  ${CYAN}[D]efault all${NC} - Apply default to all remaining"
       echo -e "  ${RED}[Q]uit${NC} - Stop and apply changes made so far"
       echo ""
-      read -p "  Choice [E/A/S/D/Q]: " -n 1 -r choice
+      read -r -p "  Choice [E/A/S/D/Q]: " choice </dev/tty
       echo ""
 
       case "${choice^^}" in
       E)
         echo ""
-        read -p "  New author name [$NEW_NAME]: " custom_name
-        read -p "  New author email [$NEW_EMAIL]: " custom_email
+        read -r -p "  New author name [$NEW_NAME]: " custom_name </dev/tty
+        read -r -p "  New author email [$NEW_EMAIL]: " custom_email </dev/tty
 
         custom_name="${custom_name:-$NEW_NAME}"
         custom_email="${custom_email:-$NEW_EMAIL}"
