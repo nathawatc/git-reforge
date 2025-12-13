@@ -209,6 +209,9 @@ parse_args() {
       show_help
       exit 0
       ;;
+    --*=*)
+      set -- "${1%%=*}" "${1#*=}" "${@:2}"
+      ;;
     *)
       log_error "Unknown option: $1"
       echo "Use --help for usage information"
@@ -456,7 +459,7 @@ interactive_edit() {
         echo ""
         echo -e "  ${CYAN}Enter new commit message (or press Enter to keep current):${NC}"
         read -r custom_message </dev/tty
-        
+
         if [[ -n "$custom_message" ]]; then
           COMMIT_MESSAGES["$commit_hash"]="$custom_message"
           log_success "Custom message saved for commit ${commit_hash:0:12}"
@@ -660,7 +663,7 @@ rewrite_commits_interactive() {
 
   local total_changes=$((${#COMMIT_OVERRIDES[@]} + ${#COMMIT_MESSAGES[@]}))
   log_info "Applying $total_changes commit modification(s)..."
-  
+
   if [[ ${#COMMIT_OVERRIDES[@]} -gt 0 ]]; then
     log_info "  - ${#COMMIT_OVERRIDES[@]} author/email change(s)"
   fi
