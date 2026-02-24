@@ -82,23 +82,23 @@ ${BOLD}EXAMPLES:${NC}
     $(basename "$0") -s https://github.com/user/repo.git \\
                      -d https://codeberg.org/user/repo.git \\
                      -e myuser@noreply.codeberg.org \\
-                     --coauthor-mode remove --coauthor-old "Scott-Nx"
+                     --coauthor-mode remove --coauthor-old "OldName"
 
     # Rewrite Co-authored-by trailers with a specific old email to narrow the match
     $(basename "$0") -s https://github.com/user/repo.git \\
                      -d https://codeberg.org/user/repo.git \\
                      -e myuser@noreply.codeberg.org \\
                      --coauthor-mode rewrite \\
-                     --coauthor-old "Scott-Nx" \\
-                     --coauthor-old-email "158021536+Scott-Nx@users.noreply.github.com" \\
-                     --coauthor-new-name "Byteintosh" \\
+                     --coauthor-old "OldName" \\
+                     --coauthor-old-email "oldname@users.noreply.github.com" \\
+                     --coauthor-new-name "NewName" \\
                      --coauthor-new-email "myuser@noreply.codeberg.org"
 
     # Interactive Co-authored-by review
     $(basename "$0") -s https://github.com/user/repo.git \\
                      -d https://codeberg.org/user/repo.git \\
                      -e myuser@noreply.codeberg.org \\
-                     --coauthor-mode interactive --coauthor-old "Scott-Nx"
+                     --coauthor-mode interactive --coauthor-old "OldName"
 
 ${BOLD}NOTES:${NC}
     - This script only modifies commits from the specified old author name(s)
