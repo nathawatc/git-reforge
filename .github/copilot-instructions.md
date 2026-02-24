@@ -51,26 +51,26 @@ src/
 All mutable state lives in `config.sh`. Do not declare new global variables
 anywhere else.
 
-| Variable | Type | Purpose |
-|---|---|---|
-| `OLD_NAMES` | array | Author names to rewrite |
-| `NEW_NAME` | string | Replacement author name |
-| `NEW_EMAIL` | string | Replacement author email |
-| `SOURCE_URL` | string | GitHub clone URL |
-| `DEST_URL` | string | Codeberg push URL |
-| `INTERACTIVE` | bool string | `true` / `false` |
-| `SIGN_MODE` | string | `keep` / `gpg` / `ssh` / `none` |
-| `GPG_KEY` | string | GPG key ID (gpg mode only) |
-| `SSH_KEY` | string | SSH key path (ssh mode only) |
-| `TEMP_DIR` | string | mktemp directory; cleaned up by `cleanup()` trap |
-| `COAUTHOR_MODE` | string | `rewrite` / `remove` / `interactive` / empty |
-| `COAUTHOR_OLD_NAME` | string | Name to match in trailers |
-| `COAUTHOR_OLD_EMAIL` | string | Optional email to narrow trailer match |
-| `COAUTHOR_NEW_NAME` | string | Replacement trailer name |
-| `COAUTHOR_NEW_EMAIL` | string | Replacement trailer email |
-| `COMMIT_OVERRIDES` | assoc array | hash → `"name\|email"` or `"SKIP"` |
-| `COMMIT_MESSAGES` | assoc array | hash → custom commit message string |
-| `COMMIT_COAUTHOR_ACTIONS` | assoc array | hash → `rewrite` / `remove` / `skip` |
+| Variable                  | Type        | Purpose                                          |
+| ------------------------- | ----------- | ------------------------------------------------ |
+| `OLD_NAMES`               | array       | Author names to rewrite                          |
+| `NEW_NAME`                | string      | Replacement author name                          |
+| `NEW_EMAIL`               | string      | Replacement author email                         |
+| `SOURCE_URL`              | string      | GitHub clone URL                                 |
+| `DEST_URL`                | string      | Codeberg push URL                                |
+| `INTERACTIVE`             | bool string | `true` / `false`                                 |
+| `SIGN_MODE`               | string      | `keep` / `gpg` / `ssh` / `none`                  |
+| `GPG_KEY`                 | string      | GPG key ID (gpg mode only)                       |
+| `SSH_KEY`                 | string      | SSH key path (ssh mode only)                     |
+| `TEMP_DIR`                | string      | mktemp directory; cleaned up by `cleanup()` trap |
+| `COAUTHOR_MODE`           | string      | `rewrite` / `remove` / `interactive` / empty     |
+| `COAUTHOR_OLD_NAME`       | string      | Name to match in trailers                        |
+| `COAUTHOR_OLD_EMAIL`      | string      | Optional email to narrow trailer match           |
+| `COAUTHOR_NEW_NAME`       | string      | Replacement trailer name                         |
+| `COAUTHOR_NEW_EMAIL`      | string      | Replacement trailer email                        |
+| `COMMIT_OVERRIDES`        | assoc array | hash → `"name\|email"` or `"SKIP"`               |
+| `COMMIT_MESSAGES`         | assoc array | hash → custom commit message string              |
+| `COMMIT_COAUTHOR_ACTIONS` | assoc array | hash → `rewrite` / `remove` / `skip`             |
 
 ## Logging
 
@@ -117,7 +117,7 @@ The confirmation prompt in `display_config` also follows this rule.
 ## Signing Rules
 
 - `keep` mode: no filter-branch pass at all.
-- `none` mode: use `--env-filter` with `export GIT_COMMITTER_DATE="$GIT_COMMITTER_DATE"` 
+- `none` mode: use `--env-filter` with `export GIT_COMMITTER_DATE="$GIT_COMMITTER_DATE"`
   after setting `gpg.sign false`. Clean up with `git config --unset` afterwards.
 - `gpg` mode: set `user.signingkey`, run `--commit-filter` with `git commit-tree -S"$KEY"`,
   then `--unset user.signingkey`.
