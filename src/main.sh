@@ -66,7 +66,17 @@ main() {
 
   run_coauthor_phase
   handle_signing
-  push_to_destination
+
+  if [[ -n "$SAVE_DIR" ]]; then
+    save_repository
+  fi
+
+  if [[ "$NO_PUSH" != true ]]; then
+    push_to_destination
+  else
+    log_info "Skipping push to Codeberg"
+  fi
+
   show_summary
 }
 

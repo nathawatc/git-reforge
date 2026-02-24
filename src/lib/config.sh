@@ -20,6 +20,8 @@ SIGN_MODE="keep"
 GPG_KEY=""
 SSH_KEY=""
 TEMP_DIR=""
+SAVE_DIR=""            # Directory to save the rewritten repo (empty = do not save)
+NO_PUSH=false          # When true, skip pushing to Codeberg entirely
 
 # Co-authored-by configuration
 COAUTHOR_MODE=""           # rewrite|remove|interactive (empty = disabled)

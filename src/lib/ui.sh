@@ -16,35 +16,48 @@ readonly _LIB_UI_LOADED=1
 display_config() {
   log_header "Migration Configuration"
 
-  echo -e "  ${BOLD}Source:${NC}        $SOURCE_URL"
-  echo -e "  ${BOLD}Destination:${NC}   $DEST_URL"
+  printf "  ${BOLD}Source:${NC}        %s\n" "$SOURCE_URL"
+  if [[ -n "$DEST_URL" ]]; then
+    printf "  ${BOLD}Destination:${NC}   %s\n" "$DEST_URL"
+  else
+    printf "  ${BOLD}Destination:${NC}   ${YELLOW}(none — push skipped)${NC}\n"
+  fi
   echo ""
   if [[ ${#OLD_NAMES[@]} -eq 1 ]]; then
-    echo -e "  ${BOLD}Old Author:${NC}    ${OLD_NAMES[0]}"
+    printf "  ${BOLD}Old Author:${NC}    %s\n" "${OLD_NAMES[0]}"
   else
-    echo -e "  ${BOLD}Old Authors:${NC}   ${OLD_NAMES[0]}"
+    printf "  ${BOLD}Old Authors:${NC}   %s\n" "${OLD_NAMES[0]}"
     for ((i = 1; i < ${#OLD_NAMES[@]}; i++)); do
-      echo -e "                 ${OLD_NAMES[$i]}"
+      printf "                 %s\n" "${OLD_NAMES[$i]}"
     done
   fi
-  echo -e "  ${BOLD}New Author:${NC}    $NEW_NAME"
-  echo -e "  ${BOLD}New Email:${NC}     $NEW_EMAIL"
+  printf "  ${BOLD}New Author:${NC}    %s\n" "$NEW_NAME"
+  printf "  ${BOLD}New Email:${NC}     %s\n" "$NEW_EMAIL"
   echo ""
-  echo -e "  ${BOLD}Interactive:${NC}   $INTERACTIVE"
-  echo -e "  ${BOLD}Sign Mode:${NC}     $SIGN_MODE"
-  [[ -n "$GPG_KEY" ]] && echo -e "  ${BOLD}GPG Key:${NC}       $GPG_KEY"
-  [[ -n "$SSH_KEY" ]] && echo -e "  ${BOLD}SSH Key:${NC}       $SSH_KEY"
+  printf "  ${BOLD}Interactive:${NC}   %s\n" "$INTERACTIVE"
+  printf "  ${BOLD}Sign Mode:${NC}     %s\n" "$SIGN_MODE"
+  [[ -n "$GPG_KEY" ]] && printf "  ${BOLD}GPG Key:${NC}       %s\n" "$GPG_KEY"
+  [[ -n "$SSH_KEY" ]] && printf "  ${BOLD}SSH Key:${NC}       %s\n" "$SSH_KEY"
+  printf "  ${BOLD}Push to Dest:${NC}  %s\n" "$( [[ "$NO_PUSH" == true ]] && printf 'no (--no-push)' || printf 'yes' )"
+  [[ -n "$SAVE_DIR" ]] && printf "  ${BOLD}Save To:${NC}       %s\n" "$SAVE_DIR"
   if [[ -n "$COAUTHOR_MODE" ]]; then
     echo ""
-    echo -e "  ${BOLD}Co-author Mode:${NC}  $COAUTHOR_MODE"
+    printf "  ${BOLD}Co-author Mode:${NC}  %s\n" "$COAUTHOR_MODE"
     local coauthor_match="$COAUTHOR_OLD_NAME"
     [[ -n "$COAUTHOR_OLD_EMAIL" ]] && coauthor_match+=" <$COAUTHOR_OLD_EMAIL>"
-    echo -e "  ${BOLD}Co-author Match:${NC} $coauthor_match"
+    printf "  ${BOLD}Co-author Match:${NC} %s\n" "$coauthor_match"
     if [[ "$COAUTHOR_MODE" == "rewrite" ]]; then
-      echo -e "  ${BOLD}Co-author New:${NC}   $COAUTHOR_NEW_NAME <$COAUTHOR_NEW_EMAIL>"
+      printf "  ${BOLD}Co-author New:${NC}   %s <%s>\n" "$COAUTHOR_NEW_NAME" "$COAUTHOR_NEW_EMAIL"
     fi
   fi
   echo ""
+
+  if [[ "$NO_PUSH" == true && -z "$SAVE_DIR" ]]; then
+    printf "  ${YELLOW}Note:${NC} --no-push is set and --save-dir is not. The rewritten\n"
+    printf "  ${YELLOW}      ${NC} repository will only exist in the temporary directory\n"
+    printf "  ${YELLOW}      ${NC} until the script exits. Use --save-dir <path> to keep it.\n"
+    echo ""
+  fi
 
   read -r -p "Proceed with migration? [y/N] " -n 1 REPLY </dev/tty
   echo ""
@@ -116,12 +129,12 @@ interactive_edit() {
     message=$(git log -1 --format="%s" "$commit_hash")
 
     echo -e "${BOLD}────────────────────────────────────────────────────────────────${NC}"
-    echo -e "${BOLD}Commit $current of $commit_count${NC}"
+    printf "${BOLD}Commit %s of %s${NC}\n" "$current" "$commit_count"
     echo -e "${BOLD}────────────────────────────────────────────────────────────────${NC}"
-    echo -e "  ${CYAN}Hash:${NC}       ${commit_hash:0:12}"
-    echo -e "  ${CYAN}Author:${NC}     $author_name <$author_email>"
-    echo -e "  ${CYAN}Date:${NC}       $author_date"
-    echo -e "  ${CYAN}Message:${NC}    $message"
+    printf "  ${CYAN}Hash:${NC}       %s\n" "${commit_hash:0:12}"
+    printf "  ${CYAN}Author:${NC}     %s <%s>\n" "$author_name" "$author_email"
+    printf "  ${CYAN}Date:${NC}       %s\n" "$author_date"
+    printf "  ${CYAN}Message:${NC}    %s\n" "$message"
     echo ""
     # Check if message has been customized
     local msg_status="(unchanged)"
@@ -129,9 +142,9 @@ interactive_edit() {
       msg_status="${YELLOW}(customized)${NC}"
     fi
     echo -e "  ${BOLD}Default changes:${NC}"
-    echo -e "    Name:    $author_name → $NEW_NAME"
-    echo -e "    Email:   $author_email → $NEW_EMAIL"
-    echo -e "    Message: $msg_status"
+    printf "    Name:    %s → %s\n" "$author_name" "$NEW_NAME"
+    printf "    Email:   %s → %s\n" "$author_email" "$NEW_EMAIL"
+    printf "    Message: %s\n" "$msg_status"
     echo ""
 
     while true; do
@@ -161,7 +174,7 @@ interactive_edit() {
       M)
         echo ""
         echo -e "  ${CYAN}Current message:${NC}"
-        echo -e "    $message"
+        printf "    %s\n" "$message"
         echo ""
         echo -e "  ${CYAN}Enter new commit message (or press Enter to keep current):${NC}"
         read -r custom_message </dev/tty
@@ -216,20 +229,21 @@ show_summary() {
 
   echo -e "  ${GREEN}✓${NC} Repository migrated from GitHub to Codeberg"
   if [[ ${#OLD_NAMES[@]} -eq 1 ]]; then
-    echo -e "  ${GREEN}✓${NC} Author '${OLD_NAMES[0]}' changed to '${NEW_NAME}'"
+    printf "  ${GREEN}✓${NC} Author '%s' changed to '%s'\n" "${OLD_NAMES[0]}" "$NEW_NAME"
   else
-    echo -e "  ${GREEN}✓${NC} Authors changed to '${NEW_NAME}':"
+    printf "  ${GREEN}✓${NC} Authors changed to '%s':\n" "$NEW_NAME"
     for old_name in "${OLD_NAMES[@]}"; do
-      echo -e "      - $old_name"
+      printf "      - %s\n" "$old_name"
     done
   fi
-  echo -e "  ${GREEN}✓${NC} Email changed to '${NEW_EMAIL}'"
+  printf "  ${GREEN}✓${NC} Email changed to '%s'\n" "$NEW_EMAIL"
   echo -e "  ${GREEN}✓${NC} Original commit dates preserved"
 
   if [[ -n "$COAUTHOR_MODE" ]]; then
     case "$COAUTHOR_MODE" in
     rewrite)
-      echo -e "  ${GREEN}✓${NC} Co-authored-by trailers rewritten to '$COAUTHOR_NEW_NAME <$COAUTHOR_NEW_EMAIL>'"
+      printf "  ${GREEN}✓${NC} Co-authored-by trailers rewritten to '%s <%s>'\n" \
+        "$COAUTHOR_NEW_NAME" "$COAUTHOR_NEW_EMAIL"
       ;;
     remove)
       echo -e "  ${GREEN}✓${NC} Matching Co-authored-by trailers removed"
@@ -240,7 +254,8 @@ show_summary() {
         [[ "$action" == "rewrite" ]] && rewrite_count=$((rewrite_count + 1))
         [[ "$action" == "remove" ]]  && remove_count=$((remove_count + 1))
       done
-      echo -e "  ${GREEN}✓${NC} Co-authored-by trailers: ${rewrite_count} rewritten, ${remove_count} removed"
+      printf "  ${GREEN}✓${NC} Co-authored-by trailers: %s rewritten, %s removed\n" \
+        "$rewrite_count" "$remove_count"
       ;;
     esac
   fi
@@ -253,14 +268,31 @@ show_summary() {
     echo -e "  ${GREEN}✓${NC} Signatures removed"
     ;;
   gpg)
-    echo -e "  ${GREEN}✓${NC} Commits re-signed with GPG key: $GPG_KEY"
+    printf "  ${GREEN}✓${NC} Commits re-signed with GPG key: %s\n" "$GPG_KEY"
     ;;
   ssh)
-    echo -e "  ${GREEN}✓${NC} Commits re-signed with SSH key: $SSH_KEY"
+    printf "  ${GREEN}✓${NC} Commits re-signed with SSH key: %s\n" "$SSH_KEY"
     ;;
   esac
 
   echo ""
-  echo -e "  ${BOLD}Codeberg Repository:${NC} $DEST_URL"
+  if [[ "$NO_PUSH" == true ]]; then
+    echo -e "  ${YELLOW}!${NC} Push to Codeberg was skipped"
+  else
+    printf "  ${BOLD}Codeberg Repository:${NC} %s\n" "$DEST_URL"
+  fi
+
+  if [[ -n "$SAVE_DIR" ]]; then
+    printf "  ${GREEN}✓${NC} Rewritten repository saved to: %s\n" "$SAVE_DIR"
+    if [[ "$NO_PUSH" == true && -n "$DEST_URL" ]]; then
+      echo ""
+      echo -e "  ${CYAN}To push later, run:${NC}"
+      printf '    cd %s\n' "$SAVE_DIR"
+      printf '    git remote set-url origin %s\n' "$DEST_URL"
+      printf '    git push --all --force\n'
+      printf '    git push --force origin "refs/tags/*:refs/tags/*"\n'
+    fi
+  fi
+
   echo ""
 }

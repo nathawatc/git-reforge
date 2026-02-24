@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #===============================================================================
-# Git Operations — Clone, Push, Dependency Check, Cleanup
+# Git Operations — Clone, Push, Save, Dependency Check, Cleanup
 #===============================================================================
 
 # Guard against double-sourcing
@@ -15,6 +15,28 @@ cleanup() {
     log_info "Cleaning up temporary directory..."
     rm -rf "$TEMP_DIR"
   fi
+}
+
+#-------------------------------------------------------------------------------
+# Save Repository
+#
+# Copies the rewritten working repository to SAVE_DIR as a standard git
+# repository (non-bare). The destination directory must not already exist;
+# this is validated by validate_args() before we ever reach this function.
+#-------------------------------------------------------------------------------
+save_repository() {
+  log_header "Saving Rewritten Repository"
+
+  log_info "Copying rewritten repository to: $SAVE_DIR"
+
+  # cp -r preserves all git internals. We copy the working tree, not the
+  # intermediate bare repo, so the saved copy is immediately usable.
+  if ! cp -r "$TEMP_DIR/working" "$SAVE_DIR"; then
+    log_error "Failed to save repository to: $SAVE_DIR"
+    exit 1
+  fi
+
+  log_success "Repository saved to: $SAVE_DIR"
 }
 
 #-------------------------------------------------------------------------------
@@ -88,6 +110,10 @@ clone_repository() {
 
 #-------------------------------------------------------------------------------
 # Push to Codeberg
+#
+# On failure the user is prompted to either:
+#   [S]ave — copy the rewritten working tree to a path they specify, or
+#   [C]leanup — let the EXIT trap discard the temporary directory normally.
 #-------------------------------------------------------------------------------
 push_to_destination() {
   log_header "Pushing to Codeberg"
@@ -97,7 +123,8 @@ push_to_destination() {
 
   log_info "Pushing all branches..."
   if ! git push --all --force; then
-    log_error "Failed to push branches"
+    log_error "Failed to push branches to Codeberg"
+    _prompt_save_or_cleanup "branch push"
     exit 1
   fi
 
@@ -111,4 +138,73 @@ push_to_destination() {
   fi
 
   log_success "Repository pushed to Codeberg successfully"
+}
+
+#-------------------------------------------------------------------------------
+# _prompt_save_or_cleanup  (private helper)
+#
+# Called after a push failure. Gives the user an interactive choice to either
+# save the already-rewritten working tree to a local path, or let cleanup run.
+# The $1 argument is a short description of the step that failed, used only in
+# the prompt text.
+#-------------------------------------------------------------------------------
+_prompt_save_or_cleanup() {
+  local failed_step="${1:-push}"
+
+  # If SAVE_DIR was already set via --save-dir the repo will be saved by
+  # main() regardless — just inform the user and return so exit 1 proceeds.
+  if [[ -n "$SAVE_DIR" ]]; then
+    log_warning "Push failed during $failed_step."
+    log_info "The rewritten repository will still be saved to: $SAVE_DIR"
+    return
+  fi
+
+  echo ""
+  echo -e "${YELLOW}[WARNING]${NC} The $failed_step to Codeberg failed." >&2
+  echo -e "${BOLD}The rewritten repository is still available in the temporary directory.${NC}" >&2
+  echo "" >&2
+  echo -e "  ${YELLOW}[S]ave${NC}    — copy the rewritten repository to a local path" >&2
+  echo -e "  ${RED}[C]leanup${NC} — discard the temporary directory and exit" >&2
+  echo "" >&2
+
+  local choice
+  while true; do
+    read -r -p "  Choice [S/C]: " choice </dev/tty
+    case "${choice^^}" in
+    S)
+      local save_path
+      while true; do
+        read -r -p "  Enter destination path: " save_path </dev/tty
+        if [[ -z "$save_path" ]]; then
+          log_warning "Path cannot be empty. Please enter a valid directory path."
+        elif [[ -e "$save_path" ]]; then
+          log_warning "Path already exists: $save_path — choose a path that does not exist."
+        else
+          break
+        fi
+      done
+
+      log_info "Saving rewritten repository to: $save_path"
+      if cp -r "$TEMP_DIR/working" "$save_path"; then
+        log_success "Repository saved to: $save_path"
+        log_info "You can push it later with:"
+        printf '    cd %s\n' "$save_path" >&2
+        printf '    git remote set-url origin %s\n' "$DEST_URL" >&2
+        printf '    git push --all --force\n' >&2
+        printf '    git push --force origin "refs/tags/*:refs/tags/*"\n' >&2
+      else
+        log_error "Failed to save repository to: $save_path"
+        log_info "The temporary directory will be cleaned up on exit."
+      fi
+      return
+      ;;
+    C)
+      log_info "Cleanup selected. The temporary directory will be removed on exit."
+      return
+      ;;
+    *)
+      log_warning "Invalid choice. Please enter S to save or C to clean up."
+      ;;
+    esac
+  done
 }

@@ -46,6 +46,12 @@ ${BOLD}OPTIONAL:${NC}
     --coauthor-new-name <name>     Replacement name  (default: --new-name value)
     --coauthor-new-email <email>   Replacement email (default: --new-email value)
 
+    --save-dir <path>        Save the rewritten repository to <path> instead of (or in
+                             addition to) pushing. The directory must not already exist.
+                             Implies --no-push when --dest is omitted.
+    --no-push                Rewrite history locally but do not push to Codeberg.
+                             Use together with --save-dir to keep the result.
+
     -h, --help               Show this help message
 
 ${BOLD}EXAMPLES:${NC}
@@ -53,6 +59,19 @@ ${BOLD}EXAMPLES:${NC}
     $(basename "$0") -s https://github.com/user/repo.git \\
                      -d https://codeberg.org/user/repo.git \\
                      -e myuser@noreply.codeberg.org
+
+    # Rewrite locally and save without pushing
+    $(basename "$0") -s https://github.com/user/repo.git \\
+                     -o "OldName" -n "NewName" \\
+                     -e newuser@noreply.codeberg.org \\
+                     --no-push --save-dir /tmp/rewritten-repo
+
+    # Rewrite, save a copy, AND push
+    $(basename "$0") -s https://github.com/user/repo.git \\
+                     -d https://codeberg.org/user/repo.git \\
+                     -o "OldName" -n "NewName" \\
+                     -e newuser@noreply.codeberg.org \\
+                     --save-dir /tmp/rewritten-repo
 
     # Interactive mode with GPG re-signing
     $(basename "$0") -s https://github.com/user/repo.git \\
@@ -108,6 +127,9 @@ ${BOLD}NOTES:${NC}
     - Rewriting history invalidates existing signatures
     - Co-authored-by matching is case-sensitive on the name field
     - When --coauthor-old-email is omitted, any email paired with --coauthor-old matches
+    - Use --no-push to perform a dry-run rewrite without touching Codeberg
+    - --save-dir copies the rewritten bare repository to the given path for later use
+    - If both --save-dir and --dest are given the repo is saved AND pushed
 
 EOF
 }
@@ -168,6 +190,14 @@ parse_args() {
       SIGN_MODE="none"
       shift
       ;;
+    --save-dir)
+      SAVE_DIR="$2"
+      shift 2
+      ;;
+    --no-push)
+      NO_PUSH=true
+      shift
+      ;;
     --coauthor-mode)
       COAUTHOR_MODE="$2"
       if [[ ! "$COAUTHOR_MODE" =~ ^(rewrite|remove|interactive)$ ]]; then
@@ -219,9 +249,15 @@ validate_args() {
     errors=$((errors + 1))
   fi
 
-  if [[ -z "$DEST_URL" ]]; then
-    log_error "Destination URL is required (-d, --dest)"
+  # --dest is required unless --no-push is set or --save-dir is provided
+  if [[ -z "$DEST_URL" && "$NO_PUSH" != true && -z "$SAVE_DIR" ]]; then
+    log_error "Destination URL is required (-d, --dest) unless --no-push or --save-dir is given"
     errors=$((errors + 1))
+  fi
+
+  # --dest without --no-push is fine; --save-dir alone implies --no-push
+  if [[ -z "$DEST_URL" && -n "$SAVE_DIR" && "$NO_PUSH" != true ]]; then
+    NO_PUSH=true
   fi
 
   if [[ -z "$NEW_EMAIL" ]]; then
@@ -241,6 +277,11 @@ validate_args() {
 
   if [[ "$SIGN_MODE" == "ssh" && -n "$SSH_KEY" && ! -f "$SSH_KEY" ]]; then
     log_error "SSH key file not found: $SSH_KEY"
+    errors=$((errors + 1))
+  fi
+
+  if [[ -n "$SAVE_DIR" && -e "$SAVE_DIR" ]]; then
+    log_error "Save directory already exists: $SAVE_DIR (choose a path that does not exist)"
     errors=$((errors + 1))
   fi
 
