@@ -125,7 +125,7 @@ interactive_coauthor_edit() {
         while IFS= read -r remaining_hash; do
           [[ -z "$remaining_hash" ]] && continue
           COMMIT_COAUTHOR_ACTIONS["$remaining_hash"]="rewrite"
-        done <<<"$(echo "$matching_commits" | tail -n +$((current + 1)))"
+        done <<<"$(printf '%s' "$matching_commits" | tail -n +$((current + 1)))"
         log_info "Will rewrite Co-authored-by trailers in all remaining commits"
         return
         ;;
@@ -134,7 +134,7 @@ interactive_coauthor_edit() {
         while IFS= read -r remaining_hash; do
           [[ -z "$remaining_hash" ]] && continue
           COMMIT_COAUTHOR_ACTIONS["$remaining_hash"]="remove"
-        done <<<"$(echo "$matching_commits" | tail -n +$((current + 1)))"
+        done <<<"$(printf '%s' "$matching_commits" | tail -n +$((current + 1)))"
         log_info "Will remove Co-authored-by trailers from all remaining commits"
         return
         ;;
@@ -167,7 +167,7 @@ _build_coauthor_msg_filter() {
   local out="$1"
   local mode_type="$2"
 
-  # Escape old name/email for use inside sed's regex (BRE)
+  # Escape old name/email for use inside sed's regex (ERE, because we emit sed -E)
   local sed_escaped_name
   sed_escaped_name=$(printf '%s' "$COAUTHOR_OLD_NAME" | sed 's/[]\[\\/.^$*]/\\&/g')
 
