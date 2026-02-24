@@ -9,6 +9,7 @@
 # - Preserve commit dates
 # - Interactive mode for per-commit editing
 # - GPG/SSH signing options
+# - Rewrite or remove Co-authored-by trailers
 #===============================================================================
 
 set -euo pipefail
@@ -38,6 +39,13 @@ GPG_KEY=""
 SSH_KEY=""
 TEMP_DIR=""
 DEFAULT_OLD_NAME="Scott-Nx"
+
+# Co-authored-by configuration
+COAUTHOR_MODE=""           # rewrite|remove|interactive (empty = disabled)
+COAUTHOR_OLD_NAME=""       # Old name to match inside Co-authored-by trailer
+COAUTHOR_OLD_EMAIL=""      # Old email to match inside Co-authored-by trailer (optional)
+COAUTHOR_NEW_NAME=""       # Replacement name  (defaults to NEW_NAME)
+COAUTHOR_NEW_EMAIL=""      # Replacement email (defaults to NEW_EMAIL)
 
 #-------------------------------------------------------------------------------
 # Utility Functions
@@ -107,6 +115,16 @@ ${BOLD}OPTIONAL:${NC}
     --gpg-key <keyid>        GPG key ID for re-signing (required if --sign-mode=gpg)
     --ssh-key <path>         SSH key path for re-signing (required if --sign-mode=ssh)
     --nosign                 Shorthand for --sign-mode=none (strip all signatures)
+
+    --coauthor-mode <mode>         Co-authored-by trailer mode: rewrite|remove|interactive
+                                   - rewrite:     Replace matching trailers in all commits
+                                   - remove:      Delete matching trailers from all commits
+                                   - interactive: Review each affected commit individually
+    --coauthor-old <name>          Name to match in Co-authored-by trailers (default: first --old-name)
+    --coauthor-old-email <email>   Email to match in Co-authored-by trailers (optional, narrows match)
+    --coauthor-new-name <name>     Replacement name  (default: --new-name value)
+    --coauthor-new-email <email>   Replacement email (default: --new-email value)
+
     -h, --help               Show this help message
 
 ${BOLD}EXAMPLES:${NC}
@@ -139,12 +157,36 @@ ${BOLD}EXAMPLES:${NC}
                      -o "OldName1,OldName2,OldName3" \\
                      -n "NewName" -e newuser@noreply.codeberg.org
 
+    # Remove Co-authored-by trailers from all commits
+    $(basename "$0") -s https://github.com/user/repo.git \\
+                     -d https://codeberg.org/user/repo.git \\
+                     -e myuser@noreply.codeberg.org \\
+                     --coauthor-mode remove --coauthor-old "Scott-Nx"
+
+    # Rewrite Co-authored-by trailers with a specific old email to narrow the match
+    $(basename "$0") -s https://github.com/user/repo.git \\
+                     -d https://codeberg.org/user/repo.git \\
+                     -e myuser@noreply.codeberg.org \\
+                     --coauthor-mode rewrite \\
+                     --coauthor-old "Scott-Nx" \\
+                     --coauthor-old-email "158021536+Scott-Nx@users.noreply.github.com" \\
+                     --coauthor-new-name "Byteintosh" \\
+                     --coauthor-new-email "myuser@noreply.codeberg.org"
+
+    # Interactive Co-authored-by review
+    $(basename "$0") -s https://github.com/user/repo.git \\
+                     -d https://codeberg.org/user/repo.git \\
+                     -e myuser@noreply.codeberg.org \\
+                     --coauthor-mode interactive --coauthor-old "Scott-Nx"
+
 ${BOLD}NOTES:${NC}
     - This script only modifies commits from the specified old author name(s)
     - Multiple old names can be specified to rewrite commits from different authors
     - Original commit dates are preserved
     - The script works on a clone, not your original repository
     - Rewriting history invalidates existing signatures
+    - Co-authored-by matching is case-sensitive on the name field
+    - When --coauthor-old-email is omitted, any email paired with --coauthor-old matches
 
 EOF
 }
@@ -204,6 +246,30 @@ parse_args() {
     --nosign)
       SIGN_MODE="none"
       shift
+      ;;
+    --coauthor-mode)
+      COAUTHOR_MODE="$2"
+      if [[ ! "$COAUTHOR_MODE" =~ ^(rewrite|remove|interactive)$ ]]; then
+        log_error "Invalid coauthor mode: $COAUTHOR_MODE (must be: rewrite|remove|interactive)"
+        exit 1
+      fi
+      shift 2
+      ;;
+    --coauthor-old)
+      COAUTHOR_OLD_NAME="$2"
+      shift 2
+      ;;
+    --coauthor-old-email)
+      COAUTHOR_OLD_EMAIL="$2"
+      shift 2
+      ;;
+    --coauthor-new-name)
+      COAUTHOR_NEW_NAME="$2"
+      shift 2
+      ;;
+    --coauthor-new-email)
+      COAUTHOR_NEW_EMAIL="$2"
+      shift 2
       ;;
     -h | --help)
       show_help
@@ -266,6 +332,19 @@ validate_args() {
   # If no old names specified, use default
   if [[ ${#OLD_NAMES[@]} -eq 0 ]]; then
     OLD_NAMES=("$DEFAULT_OLD_NAME")
+  fi
+
+  # Apply Co-authored-by defaults after OLD_NAMES is finalised
+  if [[ -n "$COAUTHOR_MODE" ]]; then
+    if [[ -z "$COAUTHOR_OLD_NAME" ]]; then
+      COAUTHOR_OLD_NAME="${OLD_NAMES[0]}"
+    fi
+    if [[ -z "$COAUTHOR_NEW_NAME" ]]; then
+      COAUTHOR_NEW_NAME="$NEW_NAME"
+    fi
+    if [[ -z "$COAUTHOR_NEW_EMAIL" ]]; then
+      COAUTHOR_NEW_EMAIL="$NEW_EMAIL"
+    fi
   fi
 }
 
@@ -347,6 +426,16 @@ display_config() {
   echo -e "  ${BOLD}Sign Mode:${NC}     $SIGN_MODE"
   [[ -n "$GPG_KEY" ]] && echo -e "  ${BOLD}GPG Key:${NC}       $GPG_KEY"
   [[ -n "$SSH_KEY" ]] && echo -e "  ${BOLD}SSH Key:${NC}       $SSH_KEY"
+  if [[ -n "$COAUTHOR_MODE" ]]; then
+    echo ""
+    echo -e "  ${BOLD}Co-author Mode:${NC}  $COAUTHOR_MODE"
+    local coauthor_match="$COAUTHOR_OLD_NAME"
+    [[ -n "$COAUTHOR_OLD_EMAIL" ]] && coauthor_match+=" <$COAUTHOR_OLD_EMAIL>"
+    echo -e "  ${BOLD}Co-author Match:${NC} $coauthor_match"
+    if [[ "$COAUTHOR_MODE" == "rewrite" ]]; then
+      echo -e "  ${BOLD}Co-author New:${NC}   $COAUTHOR_NEW_NAME <$COAUTHOR_NEW_EMAIL>"
+    fi
+  fi
   echo ""
 
   read -p "Proceed with migration? [y/N] " -n 1 -r
@@ -362,6 +451,8 @@ display_config() {
 #-------------------------------------------------------------------------------
 declare -A COMMIT_OVERRIDES
 declare -A COMMIT_MESSAGES
+# Coauthor interactive decisions: hash -> "rewrite"|"remove"|"skip"
+declare -A COMMIT_COAUTHOR_ACTIONS
 
 interactive_edit() {
   log_header "Interactive Commit Editing"
@@ -502,6 +593,272 @@ interactive_edit() {
     done
     echo ""
   done <<<"$commits"
+}
+
+#-------------------------------------------------------------------------------
+# Interactive Co-authored-by Editor
+#-------------------------------------------------------------------------------
+interactive_coauthor_edit() {
+  log_header "Interactive Co-authored-by Editing"
+
+  # Build a regex pattern to find matching Co-authored-by lines.
+  # We always match the name literally; email is optional extra constraint.
+  local escaped_old_name
+  escaped_old_name=$(printf '%s' "$COAUTHOR_OLD_NAME" | sed 's/[][\\.^$*{}()|+?]/\\&/g')
+
+  local grep_pattern
+  if [[ -n "$COAUTHOR_OLD_EMAIL" ]]; then
+    local escaped_old_email
+    escaped_old_email=$(printf '%s' "$COAUTHOR_OLD_EMAIL" | sed 's/[][\\.^$*{}()|+?]/\\&/g')
+    grep_pattern="Co-authored-by: ${escaped_old_name} <${escaped_old_email}>"
+  else
+    grep_pattern="Co-authored-by: ${escaped_old_name} "
+  fi
+
+  log_info "Scanning all commits for Co-authored-by trailers matching: $COAUTHOR_OLD_NAME"
+
+  # Collect hashes of every commit whose message contains a matching trailer
+  local matching_commits=""
+  while IFS= read -r commit_hash; do
+    local body
+    body=$(git log -1 --format="%B" "$commit_hash")
+    if echo "$body" | grep -qE "$grep_pattern"; then
+      matching_commits+="$commit_hash"$'\n'
+    fi
+  done < <(git log --all --format="%H")
+
+  # Trim trailing newline and de-duplicate
+  matching_commits=$(printf '%s' "$matching_commits" | sort -u)
+
+  if [[ -z "$matching_commits" ]]; then
+    log_warning "No commits found containing matching Co-authored-by trailers"
+    return
+  fi
+
+  local commit_count
+  commit_count=$(echo "$matching_commits" | wc -l)
+  log_info "Found $commit_count commit(s) with matching Co-authored-by trailer(s)"
+  echo ""
+
+  local current=0
+  while IFS= read -r commit_hash; do
+    [[ -z "$commit_hash" ]] && continue
+    current=$((current + 1))
+
+    local author_name author_date subject body
+    author_name=$(git log -1 --format="%an" "$commit_hash")
+    author_date=$(git log -1 --format="%ai" "$commit_hash")
+    subject=$(git log -1 --format="%s" "$commit_hash")
+    body=$(git log -1 --format="%B" "$commit_hash")
+
+    # Extract just the matching trailer lines for display
+    local matching_lines
+    matching_lines=$(echo "$body" | grep -E "$grep_pattern" || true)
+
+    echo -e "${BOLD}────────────────────────────────────────────────────────────────${NC}"
+    echo -e "${BOLD}Co-author commit $current of $commit_count${NC}"
+    echo -e "${BOLD}────────────────────────────────────────────────────────────────${NC}"
+    echo -e "  ${CYAN}Hash:${NC}    ${commit_hash:0:12}"
+    echo -e "  ${CYAN}Author:${NC}  $author_name"
+    echo -e "  ${CYAN}Date:${NC}    $author_date"
+    echo -e "  ${CYAN}Subject:${NC} $subject"
+    echo -e "  ${CYAN}Matching trailer(s):${NC}"
+    while IFS= read -r line; do
+      echo -e "    ${YELLOW}$line${NC}"
+    done <<<"$matching_lines"
+    echo ""
+
+    # Show current decision if already set
+    if [[ -v COMMIT_COAUTHOR_ACTIONS["$commit_hash"] ]]; then
+      local current_action="${COMMIT_COAUTHOR_ACTIONS[$commit_hash]}"
+      echo -e "  ${CYAN}Current decision:${NC} ${BOLD}$current_action${NC}"
+      echo ""
+    fi
+
+    while true; do
+      echo -e "  ${GREEN}[R]ewrite${NC} - Replace trailer with new Co-authored-by"
+      echo -e "  ${RED}[D]elete${NC}  - Remove the matching trailer line(s)"
+      echo -e "  ${BLUE}[S]kip${NC}   - Leave this commit unchanged"
+      echo -e "  ${CYAN}[RA]${NC}     - Rewrite all remaining commits"
+      echo -e "  ${CYAN}[DA]${NC}     - Delete trailers in all remaining commits"
+      echo -e "  ${RED}[Q]uit${NC}   - Stop and apply decisions made so far"
+      echo ""
+      read -r -p "  Choice [R/D/S/RA/DA/Q]: " choice </dev/tty
+      echo ""
+
+      case "${choice^^}" in
+      R)
+        COMMIT_COAUTHOR_ACTIONS["$commit_hash"]="rewrite"
+        log_success "Will rewrite Co-authored-by trailer in commit ${commit_hash:0:12}"
+        break
+        ;;
+      D)
+        COMMIT_COAUTHOR_ACTIONS["$commit_hash"]="remove"
+        log_success "Will remove Co-authored-by trailer from commit ${commit_hash:0:12}"
+        break
+        ;;
+      S)
+        COMMIT_COAUTHOR_ACTIONS["$commit_hash"]="skip"
+        log_info "Commit ${commit_hash:0:12} will be left unchanged"
+        break
+        ;;
+      RA)
+        COMMIT_COAUTHOR_ACTIONS["$commit_hash"]="rewrite"
+        while IFS= read -r remaining_hash; do
+          [[ -z "$remaining_hash" ]] && continue
+          COMMIT_COAUTHOR_ACTIONS["$remaining_hash"]="rewrite"
+        done <<<"$(echo "$matching_commits" | tail -n +$((current + 1)))"
+        log_info "Will rewrite Co-authored-by trailers in all remaining commits"
+        return
+        ;;
+      DA)
+        COMMIT_COAUTHOR_ACTIONS["$commit_hash"]="remove"
+        while IFS= read -r remaining_hash; do
+          [[ -z "$remaining_hash" ]] && continue
+          COMMIT_COAUTHOR_ACTIONS["$remaining_hash"]="remove"
+        done <<<"$(echo "$matching_commits" | tail -n +$((current + 1)))"
+        log_info "Will remove Co-authored-by trailers from all remaining commits"
+        return
+        ;;
+      Q)
+        log_info "Stopping Co-authored-by interactive mode. Decisions made so far will be applied."
+        return
+        ;;
+      *)
+        log_warning "Invalid choice. Please select R, D, S, RA, DA, or Q."
+        ;;
+      esac
+    done
+    echo ""
+  done <<<"$matching_commits"
+}
+
+#-------------------------------------------------------------------------------
+# Rewrite Co-authored-by Trailers (Batch)
+#-------------------------------------------------------------------------------
+rewrite_coauthors_batch() {
+  [[ -z "$COAUTHOR_MODE" ]] && return
+  [[ "$COAUTHOR_MODE" == "interactive" ]] && return
+
+  log_header "Rewriting Co-authored-by Trailers"
+
+  local coauthor_msg_filter="$TEMP_DIR/coauthor_msg_filter.sh"
+  _build_coauthor_msg_filter "$coauthor_msg_filter" "batch"
+
+  log_info "Applying Co-authored-by ${COAUTHOR_MODE} to all commits..."
+  git filter-branch -f \
+    --msg-filter "bash $coauthor_msg_filter" \
+    --tag-name-filter cat -- --all
+
+  log_success "Co-authored-by trailers updated"
+}
+
+#-------------------------------------------------------------------------------
+# Rewrite Co-authored-by Trailers (Interactive)
+#-------------------------------------------------------------------------------
+rewrite_coauthors_interactive() {
+  [[ "$COAUTHOR_MODE" != "interactive" ]] && return
+  [[ ${#COMMIT_COAUTHOR_ACTIONS[@]} -eq 0 ]] && return
+
+  log_header "Applying Co-authored-by Interactive Decisions"
+
+  local coauthor_msg_filter="$TEMP_DIR/coauthor_msg_filter.sh"
+  _build_coauthor_msg_filter "$coauthor_msg_filter" "interactive"
+
+  log_info "Applying ${#COMMIT_COAUTHOR_ACTIONS[@]} Co-authored-by decision(s)..."
+  git filter-branch -f \
+    --msg-filter "bash $coauthor_msg_filter" \
+    --tag-name-filter cat -- --all
+
+  log_success "Co-authored-by trailers updated (interactive)"
+}
+
+#-------------------------------------------------------------------------------
+# Build Co-authored-by Message Filter Script
+# Usage: _build_coauthor_msg_filter <output_path> <batch|interactive>
+#-------------------------------------------------------------------------------
+_build_coauthor_msg_filter() {
+  local out="$1"
+  local mode_type="$2"
+
+  # Escape old name/email for use inside sed's regex (BRE)
+  local sed_escaped_name
+  sed_escaped_name=$(printf '%s' "$COAUTHOR_OLD_NAME" | sed 's/[]\[\\/.^$*]/\\&/g')
+
+  local sed_match_pattern
+  if [[ -n "$COAUTHOR_OLD_EMAIL" ]]; then
+    local sed_escaped_email
+    sed_escaped_email=$(printf '%s' "$COAUTHOR_OLD_EMAIL" | sed 's/[]\[\\/.^$*]/\\&/g')
+    sed_match_pattern="Co-authored-by: ${sed_escaped_name} <${sed_escaped_email}>"
+  else
+    # Match any email paired with the old name
+    sed_match_pattern="Co-authored-by: ${sed_escaped_name} <[^>]*>"
+  fi
+
+  # Escape new name/email for use as sed replacement text
+  local sed_escaped_new_name sed_escaped_new_email
+  sed_escaped_new_name=$(printf '%s' "$COAUTHOR_NEW_NAME" | sed 's/[&\\\/]/\\&/g')
+  sed_escaped_new_email=$(printf '%s' "$COAUTHOR_NEW_EMAIL" | sed 's/[&\\\/]/\\&/g')
+  local new_trailer="Co-authored-by: ${sed_escaped_new_name} <${sed_escaped_new_email}>"
+
+  cat >"$out" <<SCRIPT_HEADER
+#!/usr/bin/env bash
+# Co-authored-by message filter — generated by main.sh
+input=\$(cat)
+SCRIPT_HEADER
+
+  if [[ "$mode_type" == "batch" ]]; then
+    # Batch: apply the same action (COAUTHOR_MODE) to every commit
+    if [[ "$COAUTHOR_MODE" == "remove" ]]; then
+      cat >>"$out" <<SCRIPT_BODY
+printf '%s' "\$input" | sed '/^${sed_match_pattern}\$/d'
+SCRIPT_BODY
+    else
+      # rewrite
+      cat >>"$out" <<SCRIPT_BODY
+printf '%s' "\$input" | sed 's/^${sed_match_pattern}\$/${new_trailer}/'
+SCRIPT_BODY
+    fi
+  else
+    # Interactive: per-commit decisions stored in COMMIT_COAUTHOR_ACTIONS
+    echo 'case "$GIT_COMMIT" in' >>"$out"
+
+    for commit_hash in "${!COMMIT_COAUTHOR_ACTIONS[@]}"; do
+      local action="${COMMIT_COAUTHOR_ACTIONS[$commit_hash]}"
+      case "$action" in
+      remove)
+        cat >>"$out" <<CASE_BLOCK
+  $commit_hash)
+    printf '%s' "\$input" | sed '/^${sed_match_pattern}\$/d'
+    ;;
+CASE_BLOCK
+        ;;
+      rewrite)
+        cat >>"$out" <<CASE_BLOCK
+  $commit_hash)
+    printf '%s' "\$input" | sed 's/^${sed_match_pattern}\$/${new_trailer}/'
+    ;;
+CASE_BLOCK
+        ;;
+      skip | *)
+        cat >>"$out" <<CASE_BLOCK
+  $commit_hash)
+    printf '%s' "\$input"
+    ;;
+CASE_BLOCK
+        ;;
+      esac
+    done
+
+    cat >>"$out" <<CASE_DEFAULT
+  *)
+    printf '%s' "\$input"
+    ;;
+esac
+CASE_DEFAULT
+  fi
+
+  chmod +x "$out"
 }
 
 #-------------------------------------------------------------------------------
@@ -696,6 +1053,22 @@ rewrite_commits_interactive() {
   log_success "Commit history rewritten successfully"
 }
 
+#-------------------------------------------------------------------------------
+# Run Co-authored-by Phase
+#-------------------------------------------------------------------------------
+run_coauthor_phase() {
+  [[ -z "$COAUTHOR_MODE" ]] && return
+
+  case "$COAUTHOR_MODE" in
+  rewrite | remove)
+    rewrite_coauthors_batch
+    ;;
+  interactive)
+    interactive_coauthor_edit
+    rewrite_coauthors_interactive
+    ;;
+  esac
+}
 
 #-------------------------------------------------------------------------------
 # Re-sign Tags
@@ -849,6 +1222,25 @@ show_summary() {
   echo -e "  ${GREEN}✓${NC} Email changed to '${NEW_EMAIL}'"
   echo -e "  ${GREEN}✓${NC} Original commit dates preserved"
 
+  if [[ -n "$COAUTHOR_MODE" ]]; then
+    case "$COAUTHOR_MODE" in
+    rewrite)
+      echo -e "  ${GREEN}✓${NC} Co-authored-by trailers rewritten to '$COAUTHOR_NEW_NAME <$COAUTHOR_NEW_EMAIL>'"
+      ;;
+    remove)
+      echo -e "  ${GREEN}✓${NC} Matching Co-authored-by trailers removed"
+      ;;
+    interactive)
+      local rewrite_count=0 remove_count=0
+      for action in "${COMMIT_COAUTHOR_ACTIONS[@]}"; do
+        [[ "$action" == "rewrite" ]] && rewrite_count=$((rewrite_count + 1))
+        [[ "$action" == "remove" ]]  && remove_count=$((remove_count + 1))
+      done
+      echo -e "  ${GREEN}✓${NC} Co-authored-by trailers: ${rewrite_count} rewritten, ${remove_count} removed"
+      ;;
+    esac
+  fi
+
   case "$SIGN_MODE" in
   keep)
     echo -e "  ${YELLOW}!${NC} Original signatures kept (but are now invalid)"
@@ -890,6 +1282,7 @@ main() {
     rewrite_commits_batch
   fi
 
+  run_coauthor_phase
   handle_signing
   push_to_destination
   show_summary
