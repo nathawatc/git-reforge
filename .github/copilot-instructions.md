@@ -68,7 +68,7 @@ anywhere else.
 | `COAUTHOR_OLD_EMAIL`      | string      | Optional email to narrow trailer match           |
 | `COAUTHOR_NEW_NAME`       | string      | Replacement trailer name                         |
 | `COAUTHOR_NEW_EMAIL`      | string      | Replacement trailer email                        |
-| `COMMIT_OVERRIDES`        | assoc array | hash → `"name"$'\x1F'"email"` or `"SKIP"`         |
+| `COMMIT_OVERRIDES`        | assoc array | hash → `"name"$'\x1F'"email"` or `"SKIP"`        |
 | `COMMIT_MESSAGES`         | assoc array | hash → custom commit message string              |
 | `COMMIT_COAUTHOR_ACTIONS` | assoc array | hash → `rewrite` / `remove` / `skip`             |
 
