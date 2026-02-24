@@ -68,7 +68,7 @@ anywhere else.
 | `COAUTHOR_OLD_EMAIL`      | string      | Optional email to narrow trailer match           |
 | `COAUTHOR_NEW_NAME`       | string      | Replacement trailer name                         |
 | `COAUTHOR_NEW_EMAIL`      | string      | Replacement trailer email                        |
-| `COMMIT_OVERRIDES`        | assoc array | hash → `"name\|email"` or `"SKIP"`               |
+| `COMMIT_OVERRIDES`        | assoc array | hash → `"name"$'\x1F'"email"` or `"SKIP"`         |
 | `COMMIT_MESSAGES`         | assoc array | hash → custom commit message string              |
 | `COMMIT_COAUTHOR_ACTIONS` | assoc array | hash → `rewrite` / `remove` / `skip`             |
 
@@ -113,6 +113,13 @@ The confirmation prompt in `display_config` also follows this rule.
    requires ERE. Always emit `sed -E` in generated coauthor filter scripts.
 5. **Consistent invoker**: `--env-filter` scripts are invoked with `source`;
    `--msg-filter` scripts are invoked with `bash`.
+6. **COMMIT_OVERRIDES separator**: Name and email are joined with the ASCII Unit
+   Separator (`$'\x1F'`) and split with `IFS=$'\x1F'`. Never use `|` as the
+   separator — it is a valid character in neither field but the Unit Separator is
+   guaranteed non-printable and unambiguous.
+7. **Unset exported filter variables**: After each `filter-branch` run that exports
+   helper variables (e.g. `FILTER_NEW_NAME`, `FILTER_NEW_EMAIL`), immediately
+   `unset` them so they do not leak into subsequent filter-branch passes.
 
 ## Signing Rules
 
@@ -149,6 +156,11 @@ Never use `git push --tags` for this project.
 - `--coauthor-mode` values are validated inline during `parse_args()`.
 - SSH key path existence is validated in `validate_args()`.
 - GPG key availability is validated in `check_dependencies()`.
+- `ssh-keygen` binary availability is validated in `check_dependencies()` when
+  `--sign-mode ssh` is active.
+- Empty-string entries in `OLD_NAMES` (produced by `-o ""` or `-o ","`) are
+  rejected in `validate_args()` with a `log_error` and `exit 1`. An empty string
+  would match every commit author via exact string comparison.
 
 ## Commit Message Style
 
@@ -177,3 +189,10 @@ Scopes map to file names without extension: `main`, `args`, `config`, `git_ops`,
   in source code, help text, or examples.
 - Do not leave `git config` entries (signingkey, gpg.format, gpg.sign) set after
   a filter-branch run. Always clean up with `git config --unset`.
+- Do not use `|` as the separator in `COMMIT_OVERRIDES` values. Use `$'\x1F'`
+  (ASCII Unit Separator) and split with `IFS=$'\x1F'`.
+- Do not leave `FILTER_NEW_NAME` or `FILTER_NEW_EMAIL` exported after
+  `rewrite_commits_batch` completes. Always `unset` them immediately after the
+  `filter-branch` call.
+- Do not add a `check_dependencies` check for `ssh-keygen` without also adding it
+  under the `[[ "$SIGN_MODE" == "ssh" ]]` guard, consistent with the gpg block.
