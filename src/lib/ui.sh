@@ -46,7 +46,7 @@ display_config() {
   fi
   echo ""
 
-  read -p "Proceed with migration? [y/N] " -n 1 -r
+  read -r -p "Proceed with migration? [y/N] " -n 1 REPLY </dev/tty
   echo ""
   if [[ ! $REPLY =~ ^[Yy]$ ]]; then
     log_info "Migration cancelled"
