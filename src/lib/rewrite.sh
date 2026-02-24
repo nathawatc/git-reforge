@@ -47,6 +47,11 @@ EOF
     fi
   done
 
+  # Default arm: commits not in COMMIT_OVERRIDES are left untouched
+  cat >>"$filter_script" <<'FILTER_DEFAULT'
+    *)
+        ;;
+FILTER_DEFAULT
   echo 'esac' >>"$filter_script"
 
   chmod +x "$filter_script"
@@ -194,21 +199,30 @@ rewrite_commits_interactive() {
     log_info "  - ${#COMMIT_MESSAGES[@]} message change(s)"
   fi
 
-  # Generate filter scripts
+  # Generate filter scripts only for the passes that are actually needed
   local filter_script msg_filter_script
-  filter_script=$(generate_interactive_filter)
   msg_filter_script=$(generate_message_filter)
 
-  # Build filter-branch command with both filters
-  # Use msg-filter only if there are message changes
-  if [[ ${#COMMIT_MESSAGES[@]} -gt 0 ]]; then
-    git filter-branch -f \
-      --env-filter "source $filter_script" \
-      --msg-filter "source $msg_filter_script" \
-      --tag-name-filter cat -- --all
+  # Run env-filter pass only when there are author/email overrides to apply.
+  # When COMMIT_OVERRIDES is empty the generated script would be a vacuous
+  # case block that rewrites every commit object for no reason.
+  if [[ ${#COMMIT_OVERRIDES[@]} -gt 0 ]]; then
+    filter_script=$(generate_interactive_filter)
+
+    if [[ ${#COMMIT_MESSAGES[@]} -gt 0 ]]; then
+      git filter-branch -f \
+        --env-filter "source $filter_script" \
+        --msg-filter "source $msg_filter_script" \
+        --tag-name-filter cat -- --all
+    else
+      git filter-branch -f \
+        --env-filter "source $filter_script" \
+        --tag-name-filter cat -- --all
+    fi
   else
+    # Only message changes — no identity rewriting needed
     git filter-branch -f \
-      --env-filter "source $filter_script" \
+      --msg-filter "source $msg_filter_script" \
       --tag-name-filter cat -- --all
   fi
 
