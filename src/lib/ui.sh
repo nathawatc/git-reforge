@@ -100,7 +100,7 @@ interactive_edit() {
   fi
 
   local commit_count
-  commit_count=$(echo "$commits" | wc -l)
+  commit_count=$(printf '%s' "$commits" | wc -l)
   log_info "Found $commit_count commit(s) to review"
   echo ""
 
