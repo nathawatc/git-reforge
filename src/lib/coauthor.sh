@@ -54,7 +54,7 @@ interactive_coauthor_edit() {
   fi
 
   local commit_count
-  commit_count=$(echo "$matching_commits" | wc -l)
+  commit_count=$(printf '%s' "$matching_commits" | wc -l)
   log_info "Found $commit_count commit(s) with matching Co-authored-by trailer(s)"
   echo ""
 
