@@ -52,7 +52,10 @@ main() {
   display_config
   clone_repository
 
-  cd "$TEMP_DIR/working"
+  if ! cd "$TEMP_DIR/working"; then
+    log_error "Failed to enter working directory: $TEMP_DIR/working"
+    exit 1
+  fi
 
   if [[ "$INTERACTIVE" == true ]]; then
     interactive_edit
