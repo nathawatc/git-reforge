@@ -41,6 +41,13 @@ check_dependencies() {
     fi
   fi
 
+  if [[ "$SIGN_MODE" == "ssh" ]]; then
+    if ! command -v ssh-keygen &>/dev/null; then
+      log_error "ssh-keygen is not installed (required for SSH signing)"
+      exit 1
+    fi
+  fi
+
   log_success "All dependencies satisfied"
 }
 
@@ -63,7 +70,7 @@ clone_repository() {
   # Scoped to a subshell so the cd calls do not change the caller's working
   # directory as a side effect.
   log_info "Converting to working repository..."
-  (
+  if ! (
     cd "$TEMP_DIR"
     if ! git clone repo.git working; then
       log_error "Failed to convert mirror to working repository"
@@ -71,7 +78,10 @@ clone_repository() {
     fi
     cd working
     git fetch --all
-  )
+  ); then
+    log_error "Failed to prepare working repository"
+    exit 1
+  fi
 
   log_success "Repository cloned successfully"
 }
