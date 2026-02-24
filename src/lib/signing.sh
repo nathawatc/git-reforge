@@ -38,7 +38,13 @@ resign_tags() {
     log_info "Stripping signatures from annotated tags..."
     for tag in "${annotated_tags[@]}"; do
       local tag_message tag_commit
-      tag_message=$(git tag -l --format='%(contents)' "$tag")
+      # %(contents:subject) and %(contents:body) exclude the signature block,
+      # preventing the stale PGP/SSH footer from becoming part of the new message.
+      local tag_subject tag_body
+      tag_subject=$(git tag -l --format='%(contents:subject)' "$tag")
+      tag_body=$(git tag -l --format='%(contents:body)' "$tag")
+      tag_message="$tag_subject"
+      [[ -n "$tag_body" ]] && tag_message="$tag_message"$'\n\n'"$tag_body"
       tag_commit=$(git rev-list -1 "$tag")
       # Recreate tag without signature
       git tag -f -a "$tag" "$tag_commit" -m "$tag_message"
@@ -50,7 +56,11 @@ resign_tags() {
     log_info "Re-signing annotated tags with GPG key: $GPG_KEY..."
     for tag in "${annotated_tags[@]}"; do
       local tag_message tag_commit
-      tag_message=$(git tag -l --format='%(contents)' "$tag")
+      local tag_subject tag_body
+      tag_subject=$(git tag -l --format='%(contents:subject)' "$tag")
+      tag_body=$(git tag -l --format='%(contents:body)' "$tag")
+      tag_message="$tag_subject"
+      [[ -n "$tag_body" ]] && tag_message="$tag_message"$'\n\n'"$tag_body"
       tag_commit=$(git rev-list -1 "$tag")
       # Recreate tag with GPG signature
       git tag -f -s "$tag" "$tag_commit" -u "$GPG_KEY" -m "$tag_message"
@@ -62,7 +72,11 @@ resign_tags() {
     log_info "Re-signing annotated tags with SSH key: $SSH_KEY..."
     for tag in "${annotated_tags[@]}"; do
       local tag_message tag_commit
-      tag_message=$(git tag -l --format='%(contents)' "$tag")
+      local tag_subject tag_body
+      tag_subject=$(git tag -l --format='%(contents:subject)' "$tag")
+      tag_body=$(git tag -l --format='%(contents:body)' "$tag")
+      tag_message="$tag_subject"
+      [[ -n "$tag_body" ]] && tag_message="$tag_message"$'\n\n'"$tag_body"
       tag_commit=$(git rev-list -1 "$tag")
       # Recreate tag with SSH signature
       git tag -f -s "$tag" "$tag_commit" -m "$tag_message"
@@ -117,6 +131,9 @@ handle_signing() {
                 git commit-tree -S\"$GPG_KEY\" \"\$@\"
             " --tag-name-filter cat -- --all
 
+    # Clean up config entries set for the filter run
+    git config --unset user.signingkey 2>/dev/null || true
+
     log_success "Commits re-signed with GPG"
     resign_tags
     ;;
@@ -130,6 +147,10 @@ handle_signing() {
     git filter-branch -f --commit-filter '
                 git commit-tree -S "$@"
             ' --tag-name-filter cat -- --all
+
+    # Clean up config entries set for the filter run
+    git config --unset user.signingkey 2>/dev/null || true
+    git config --unset gpg.format 2>/dev/null || true
 
     log_success "Commits re-signed with SSH"
     resign_tags
