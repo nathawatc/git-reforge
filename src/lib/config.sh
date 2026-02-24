@@ -20,7 +20,6 @@ SIGN_MODE="keep"
 GPG_KEY=""
 SSH_KEY=""
 TEMP_DIR=""
-DEFAULT_OLD_NAME="Scott-Nx"
 
 # Co-authored-by configuration
 COAUTHOR_MODE=""           # rewrite|remove|interactive (empty = disabled)
