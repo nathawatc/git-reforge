@@ -258,6 +258,18 @@ validate_args() {
     exit 1
   fi
 
+  # Guard against empty-string entries produced by -o "" or -o ","
+  # An empty name would match every commit author via exact string comparison.
+  local name
+  for name in "${OLD_NAMES[@]}"; do
+    if [[ -z "$name" ]]; then
+      log_error "Empty string is not a valid old author name (-o, --old-name)"
+      echo ""
+      echo "Use --help for usage information"
+      exit 1
+    fi
+  done
+
   # Apply Co-authored-by defaults after OLD_NAMES is finalised
   if [[ -n "$COAUTHOR_MODE" ]]; then
     if [[ -z "$COAUTHOR_OLD_NAME" ]]; then
