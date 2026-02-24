@@ -34,7 +34,7 @@ FILTER_HEADER
       echo "        ;;" >>"$filter_script"
     else
       local custom_name custom_email
-      IFS='|' read -r custom_name custom_email <<<"$override"
+      IFS=$'\x1F' read -r custom_name custom_email <<<"$override"
 
       # Escape characters that would break the double-quoted export lines
       # inside the generated script: backslashes first, then quotes and dollars.
@@ -181,6 +181,10 @@ FILTER_LOGIC
 
   # Use git filter-branch with the generated script
   git filter-branch -f --env-filter "source $filter_script" --tag-name-filter cat -- --all
+
+  # Clean up exported variables so they do not leak into subsequent filter-branch runs
+  unset FILTER_NEW_NAME
+  unset FILTER_NEW_EMAIL
 
   log_success "Commit history rewritten successfully"
 }
