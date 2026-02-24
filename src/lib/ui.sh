@@ -154,7 +154,7 @@ interactive_edit() {
         custom_name="${custom_name:-$NEW_NAME}"
         custom_email="${custom_email:-$NEW_EMAIL}"
 
-        COMMIT_OVERRIDES["$commit_hash"]="$custom_name|$custom_email"
+        COMMIT_OVERRIDES["$commit_hash"]="${custom_name}"$'\x1F'"${custom_email}"
         log_success "Custom name/email saved for commit ${commit_hash:0:12}"
         echo ""
         ;;
@@ -175,7 +175,7 @@ interactive_edit() {
         echo ""
         ;;
       A)
-        COMMIT_OVERRIDES["$commit_hash"]="$NEW_NAME|$NEW_EMAIL"
+        COMMIT_OVERRIDES["$commit_hash"]="${NEW_NAME}"$'\x1F'"${NEW_EMAIL}"
         log_success "Changes will be applied to commit ${commit_hash:0:12}"
         break
         ;;
@@ -187,9 +187,9 @@ interactive_edit() {
       D)
         log_info "Applying default changes to all remaining commits..."
         # Apply default to current and all remaining
-        COMMIT_OVERRIDES["$commit_hash"]="$NEW_NAME|$NEW_EMAIL"
+        COMMIT_OVERRIDES["$commit_hash"]="${NEW_NAME}"$'\x1F'"${NEW_EMAIL}"
         while IFS= read -r remaining_hash; do
-          COMMIT_OVERRIDES["$remaining_hash"]="$NEW_NAME|$NEW_EMAIL"
+          COMMIT_OVERRIDES["$remaining_hash"]="${NEW_NAME}"$'\x1F'"${NEW_EMAIL}"
         done <<<"$(printf '%s' "$commits" | tail -n +$((current + 1)))"
         return
         ;;
