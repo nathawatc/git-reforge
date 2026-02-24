@@ -92,7 +92,7 @@ interactive_edit() {
   done
 
   # Remove duplicates and sort
-  commits=$(echo "$commits" | sort -u)
+  commits=$(printf '%s' "$commits" | sort -u)
 
   if [[ -z "$commits" ]]; then
     log_warning "No commits found from author(s): ${OLD_NAMES[*]}"
@@ -190,7 +190,7 @@ interactive_edit() {
         COMMIT_OVERRIDES["$commit_hash"]="$NEW_NAME|$NEW_EMAIL"
         while IFS= read -r remaining_hash; do
           COMMIT_OVERRIDES["$remaining_hash"]="$NEW_NAME|$NEW_EMAIL"
-        done <<<"$(echo "$commits" | tail -n +$((current + 1)))"
+        done <<<"$(printf '%s' "$commits" | tail -n +$((current + 1)))"
         return
         ;;
       Q)
