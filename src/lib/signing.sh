@@ -78,7 +78,7 @@ resign_tags() {
 #
 # Processes all commits according to SIGN_MODE:
 #   keep — do nothing (original signatures are now invalid but preserved)
-#   none — strip all commit signatures via a no-op commit-filter
+#   none — strip all commit signatures by forcing commit re-creation without signing
 #   gpg  — re-sign every commit with the configured GPG key
 #   ssh  — re-sign every commit with the configured SSH key
 #
@@ -93,9 +93,16 @@ handle_signing() {
     log_header "Removing Signatures"
     log_info "Stripping all commit signatures..."
 
-    git filter-branch -f --commit-filter '
-                git commit-tree "$@"
+    # Disable any signing config locally so git commit-tree never attaches a
+    # signature, then force every commit object to be re-created by touching
+    # GIT_COMMITTER_DATE.  Rewriting the object is what actually drops the
+    # existing signature — the no-op "git commit-tree $@" pattern does NOT
+    # strip signatures because it just copies the original object verbatim.
+    git config gpg.sign false 2>/dev/null || true
+    git filter-branch -f --env-filter '
+                export GIT_COMMITTER_DATE="$GIT_COMMITTER_DATE"
             ' --tag-name-filter cat -- --all
+    git config --unset gpg.sign 2>/dev/null || true
 
     log_success "Signatures removed"
     resign_tags
