@@ -36,12 +36,22 @@ FILTER_HEADER
       local custom_name custom_email
       IFS='|' read -r custom_name custom_email <<<"$override"
 
+      # Escape characters that would break the double-quoted export lines
+      # inside the generated script: backslashes first, then quotes and dollars.
+      local safe_name safe_email
+      safe_name="${custom_name//\\/\\\\}"
+      safe_name="${safe_name//\"/\\\"}"
+      safe_name="${safe_name//\$/\\\$}"
+      safe_email="${custom_email//\\/\\\\}"
+      safe_email="${safe_email//\"/\\\"}"
+      safe_email="${safe_email//\$/\\\$}"
+
       cat >>"$filter_script" <<EOF
     $commit_hash)
-        export GIT_AUTHOR_NAME="$custom_name"
-        export GIT_AUTHOR_EMAIL="$custom_email"
-        export GIT_COMMITTER_NAME="$custom_name"
-        export GIT_COMMITTER_EMAIL="$custom_email"
+        export GIT_AUTHOR_NAME="$safe_name"
+        export GIT_AUTHOR_EMAIL="$safe_email"
+        export GIT_COMMITTER_NAME="$safe_name"
+        export GIT_COMMITTER_EMAIL="$safe_email"
         ;;
 EOF
     fi
