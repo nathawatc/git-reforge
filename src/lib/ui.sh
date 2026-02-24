@@ -109,12 +109,10 @@ interactive_edit() {
     current=$((current + 1))
 
     # Get commit details
-    local author_name author_email author_date committer_name committer_email message
+    local author_name author_email author_date message
     author_name=$(git log -1 --format="%an" "$commit_hash")
     author_email=$(git log -1 --format="%ae" "$commit_hash")
     author_date=$(git log -1 --format="%ai" "$commit_hash")
-    committer_name=$(git log -1 --format="%cn" "$commit_hash")
-    committer_email=$(git log -1 --format="%ce" "$commit_hash")
     message=$(git log -1 --format="%s" "$commit_hash")
 
     echo -e "${BOLD}────────────────────────────────────────────────────────────────${NC}"
@@ -122,7 +120,6 @@ interactive_edit() {
     echo -e "${BOLD}────────────────────────────────────────────────────────────────${NC}"
     echo -e "  ${CYAN}Hash:${NC}       ${commit_hash:0:12}"
     echo -e "  ${CYAN}Author:${NC}     $author_name <$author_email>"
-    echo -e "  ${CYAN}Committer:${NC}  $committer_name <$committer_email>"
     echo -e "  ${CYAN}Date:${NC}       $author_date"
     echo -e "  ${CYAN}Message:${NC}    $message"
     echo ""
