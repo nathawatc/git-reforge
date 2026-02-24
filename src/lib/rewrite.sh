@@ -76,28 +76,27 @@ MSG_FILTER_HEADER
 
     for commit_hash in "${!COMMIT_MESSAGES[@]}"; do
       local custom_msg="${COMMIT_MESSAGES[$commit_hash]}"
-      # Escape special characters for shell
-      custom_msg="${custom_msg//\\/\\\\}"
-      custom_msg="${custom_msg//\"/\\\"}"
-      custom_msg="${custom_msg//\$/\\\$}"
-      custom_msg="${custom_msg//\`/\\\`}"
+      # Write the message to a sidecar file so the filter script can read it
+      # safely without any quoting, escaping, or truncation issues.
+      local msg_file="$TEMP_DIR/msg_${commit_hash}.txt"
+      printf '%s' "$custom_msg" >"$msg_file"
 
       cat >>"$msg_filter_script" <<EOF
     $commit_hash)
-        echo "$custom_msg"
+        cat "$msg_file"
         ;;
 EOF
     done
 
     cat >>"$msg_filter_script" <<'MSG_FILTER_DEFAULT'
     *)
-        echo "$original_msg"
+        printf '%s' "$original_msg"
         ;;
 esac
 MSG_FILTER_DEFAULT
   else
     # No custom messages, just pass through
-    echo 'echo "$original_msg"' >>"$msg_filter_script"
+    echo 'printf "%s" "$original_msg"' >>"$msg_filter_script"
   fi
 
   chmod +x "$msg_filter_script"
