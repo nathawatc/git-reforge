@@ -23,9 +23,9 @@ ${BOLD}REQUIRED OPTIONS:${NC}
     -e, --new-email <email>  New author email (e.g., username@noreply.codeberg.org)
 
 ${BOLD}OPTIONAL:${NC}
-    -n, --new-name <name>    New author name (default: Byteintosh)
+    -n, --new-name <name>    New author name
     -o, --old-name <name>    Old author name(s) to replace. Can be specified multiple times
-                             or as comma-separated values (default: Scott-Nx)
+                             or as comma-separated values. Required.
                              Examples: -o "Name1" -o "Name2" or -o "Name1,Name2"
     -i, --interactive        Enable interactive mode for per-commit editing
     --sign-mode <mode>       Signing mode: keep|gpg|ssh|none (default: keep)
@@ -139,7 +139,7 @@ parse_args() {
       IFS=',' read -ra NAMES <<<"$2"
       for name in "${NAMES[@]}"; do
         # Trim whitespace
-        name="$(echo -e "${name}" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')"
+        name="$(printf '%s' "${name}" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')"
         OLD_NAMES+=("$name")
       done
       shift 2
@@ -250,9 +250,12 @@ validate_args() {
     exit 1
   fi
 
-  # If no old names specified, use default
+  # --old-name is required; there is no built-in default
   if [[ ${#OLD_NAMES[@]} -eq 0 ]]; then
-    OLD_NAMES=("$DEFAULT_OLD_NAME")
+    log_error "At least one old author name is required (-o, --old-name)"
+    echo ""
+    echo "Use --help for usage information"
+    exit 1
   fi
 
   # Apply Co-authored-by defaults after OLD_NAMES is finalised
