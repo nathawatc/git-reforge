@@ -372,7 +372,11 @@ interactive_edit() {
   local commits=""
   for old_name in "${OLD_NAMES[@]}"; do
     local author_commits
-    author_commits=$(git log --all --format="%H" --author="$old_name" 2>/dev/null || true)
+    # Use --fixed-strings equivalent: wrap name in \Q...\E so regex metacharacters
+    # like [bot] are treated as literals by git log's POSIX regex engine.
+    local escaped_name
+    escaped_name=$(printf '%s' "$old_name" | sed 's/[][\\.^$*{}()|+?]/\\&/g')
+    author_commits=$(git log --all --format="%H" --author="$escaped_name" 2>/dev/null || true)
     if [[ -n "$author_commits" ]]; then
       if [[ -n "$commits" ]]; then
         commits="$commits"$'\n'"$author_commits"
@@ -614,10 +618,10 @@ rewrite_commits_batch() {
 # Check if current author matches any of the old names
 FILTER_START
 
-  # Add array of old names
+  # Add array of old names (printf %q ensures special chars like [bot] are safely escaped)
   echo 'OLD_NAMES_ARRAY=(' >>"$filter_script"
   for old_name in "${OLD_NAMES[@]}"; do
-    echo "    \"$old_name\"" >>"$filter_script"
+    printf '    %q\n' "$old_name" >>"$filter_script"
   done
   echo ')' >>"$filter_script"
 
