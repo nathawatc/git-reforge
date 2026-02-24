@@ -59,14 +59,19 @@ clone_repository() {
     exit 1
   fi
 
-  # Convert bare repo to normal repo for easier manipulation
+  # Convert bare repo to normal repo for easier manipulation.
+  # Scoped to a subshell so the cd calls do not change the caller's working
+  # directory as a side effect.
   log_info "Converting to working repository..."
-  cd "$TEMP_DIR"
-  git clone repo.git working
-  cd working
-
-  # Fetch all branches
-  git fetch --all
+  (
+    cd "$TEMP_DIR"
+    if ! git clone repo.git working; then
+      log_error "Failed to convert mirror to working repository"
+      exit 1
+    fi
+    cd working
+    git fetch --all
+  )
 
   log_success "Repository cloned successfully"
 }
@@ -87,7 +92,11 @@ push_to_destination() {
   fi
 
   log_info "Pushing all tags..."
-  if ! git push --tags --force; then
+  # Use the explicit refspec instead of --tags so that re-created annotated tag
+  # objects (whose SHA changed after resign_tags) are pushed correctly.
+  # --tags only pushes tags that are missing on the remote; it silently skips
+  # tags whose local object SHA differs from the remote's, dropping re-signed tags.
+  if ! git push --force origin "refs/tags/*:refs/tags/*"; then
     log_warning "Failed to push some tags (this may be expected if no tags exist)"
   fi
 
