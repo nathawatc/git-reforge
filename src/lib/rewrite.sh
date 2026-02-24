@@ -185,8 +185,7 @@ rewrite_commits_interactive() {
     return
   fi
 
-  local total_changes=$((${#COMMIT_OVERRIDES[@]} + ${#COMMIT_MESSAGES[@]}))
-  log_info "Applying $total_changes commit modification(s)..."
+  log_info "Applying $((${#COMMIT_OVERRIDES[@]} + ${#COMMIT_MESSAGES[@]})) commit modification(s)..."
 
   if [[ ${#COMMIT_OVERRIDES[@]} -gt 0 ]]; then
     log_info "  - ${#COMMIT_OVERRIDES[@]} author/email change(s)"
