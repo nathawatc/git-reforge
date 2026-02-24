@@ -40,7 +40,7 @@ interactive_coauthor_edit() {
   while IFS= read -r commit_hash; do
     local body
     body=$(git log -1 --format="%B" "$commit_hash")
-    if echo "$body" | grep -qE "$grep_pattern"; then
+    if printf '%s' "$body" | grep -qE "$grep_pattern"; then
       matching_commits+="$commit_hash"$'\n'
     fi
   done < <(git log --all --format="%H")
@@ -71,7 +71,7 @@ interactive_coauthor_edit() {
 
     # Extract just the matching trailer lines for display
     local matching_lines
-    matching_lines=$(echo "$body" | grep -E "$grep_pattern" || true)
+    matching_lines=$(printf '%s' "$body" | grep -E "$grep_pattern" || true)
 
     echo -e "${BOLD}────────────────────────────────────────────────────────────────${NC}"
     echo -e "${BOLD}Co-author commit $current of $commit_count${NC}"
@@ -197,12 +197,12 @@ SCRIPT_HEADER
     # Batch: apply the same action (COAUTHOR_MODE) to every commit
     if [[ "$COAUTHOR_MODE" == "remove" ]]; then
       cat >>"$out" <<SCRIPT_BODY
-printf '%s' "\$input" | sed '/^${sed_match_pattern}\$/d'
+printf '%s' "\$input" | sed -E '/^${sed_match_pattern}\$/d'
 SCRIPT_BODY
     else
       # rewrite
       cat >>"$out" <<SCRIPT_BODY
-printf '%s' "\$input" | sed 's/^${sed_match_pattern}\$/${new_trailer}/'
+printf '%s' "\$input" | sed -E 's/^${sed_match_pattern}\$/${new_trailer}/'
 SCRIPT_BODY
     fi
   else
@@ -215,14 +215,14 @@ SCRIPT_BODY
       remove)
         cat >>"$out" <<CASE_BLOCK
   $commit_hash)
-    printf '%s' "\$input" | sed '/^${sed_match_pattern}\$/d'
+    printf '%s' "\$input" | sed -E '/^${sed_match_pattern}\$/d'
     ;;
 CASE_BLOCK
         ;;
       rewrite)
         cat >>"$out" <<CASE_BLOCK
   $commit_hash)
-    printf '%s' "\$input" | sed 's/^${sed_match_pattern}\$/${new_trailer}/'
+    printf '%s' "\$input" | sed -E 's/^${sed_match_pattern}\$/${new_trailer}/'
     ;;
 CASE_BLOCK
         ;;
