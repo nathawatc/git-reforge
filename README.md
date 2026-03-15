@@ -1,6 +1,6 @@
 # GitHub To Codeberg
 
-A powerful tool for migrating repositories from GitHub to Codeberg with commit history rewriting capabilities.
+Migrate repositories from GitHub to Codeberg with history rewriting.
 
 ## Features
 
@@ -12,7 +12,7 @@ A powerful tool for migrating repositories from GitHub to Codeberg with commit h
   - Edit commit messages
   - Skip specific commits
   - Apply defaults to remaining commits
-- **Co-authored-by Trailer Rewriting** - Rewrite, remove, or interactively review `Co-authored-by` trailers
+- **Co-author Rewriting** - Rewrite, remove, or review trailers interactively
 - **Commit Signing** - GPG and SSH signing options:
   - Keep original signatures
   - Re-sign with GPG key
@@ -54,18 +54,18 @@ chmod +x src/main.sh
 
 ### Optional Options
 
-| Option                  | Description                                                                                            |
-| ----------------------- | ------------------------------------------------------------------------------------------------------ |
-| `-n, --new-name <name>` | New author name                                                                                        |
-| `-o, --old-name <name>` | Old author name(s) to replace (required; can be specified multiple times or as comma-separated values) |
-| `-i, --interactive`     | Enable interactive mode for per-commit editing                                                         |
-| `--sign-mode <mode>`    | Signing mode: `keep\|gpg\|ssh\|none` (default: `keep`)                                                 |
-| `--gpg-key <keyid>`     | GPG key ID for re-signing (required if `--sign-mode=gpg`)                                              |
-| `--ssh-key <path>`      | SSH key path for re-signing (required if `--sign-mode=ssh`)                                            |
-| `--nosign`              | Shorthand for `--sign-mode=none`                                                                       |
-| `--save-dir <path>`     | Save the rewritten repository to `<path>` (directory must not already exist)                           |
-| `--no-push`             | Rewrite history locally but skip pushing to Codeberg                                                   |
-| `-h, --help`            | Show help message                                                                                      |
+| Option                  | Description                                                        |
+| ----------------------- | ------------------------------------------------------------------ |
+| `-n, --new-name <name>` | New author name                                                    |
+| `-o, --old-name <name>` | Old author name(s) to replace (can be multiple or comma-separated) |
+| `-i, --interactive`     | Enable interactive mode for per-commit editing                     |
+| `--sign-mode <mode>`    | Signing mode: `keep\|gpg\|ssh\|none` (default: `keep`)             |
+| `--gpg-key <keyid>`     | GPG key ID for re-signing (required if `--sign-mode=gpg`)          |
+| `--ssh-key <path>`      | SSH key path for re-signing (required if `--sign-mode=ssh`)        |
+| `--nosign`              | Shorthand for `--sign-mode=none`                                   |
+| `--save-dir <path>`     | Save rewritten repo to `<path>` (directory must not exist)         |
+| `--no-push`             | Rewrite history locally but skip pushing to Codeberg               |
+| `-h, --help`            | Show help message                                                  |
 
 ### Co-authored-by Options
 
@@ -191,7 +191,7 @@ When using `-i` flag, you can review each commit and choose:
 
 ### Co-authored-by Interactive Mode
 
-When using `--coauthor-mode interactive`, you can review each affected commit and choose:
+With `--coauthor-mode interactive`, you can review each affected commit:
 
 | Key | Action                                  |
 | --- | --------------------------------------- |
@@ -202,18 +202,18 @@ When using `--coauthor-mode interactive`, you can review each affected commit an
 
 ### Push Failure Recovery
 
-If a push to Codeberg fails after the rewrite has completed, the script prompts you to either:
+If a push fails after the rewrite, the script prompts you to either:
 
-- **[S] Save** — copy the rewritten repository to a local path you specify, along with the exact commands needed to push it later
+- **[S] Save** — copy the rewritten repo locally with commands to push later
 - **[C] Cleanup** — discard the temporary directory and exit
 
-If `--save-dir` was already provided, the save proceeds automatically regardless of the push failure.
+If `--save-dir` was provided, the save proceeds regardless of push failure.
 
 > [!NOTE]
 >
-> - The script operates on a temporary clone — your original repository is never modified
+> - The script uses a temporary clone — original repo is never modified
 > - Rewriting history invalidates any existing commit signatures
-> - `--no-push` is useful for inspecting the rewritten repository before committing to a push
-> - `--save-dir` and `--dest` can be combined to both save a local copy and push in one run
-> - `Co-authored-by` name matching is case-sensitive; use `--coauthor-old-email` to narrow matches when multiple authors share a name
-> - When `--save-dir` is used alone (without `--dest`), `--no-push` is implied automatically
+> - `--no-push` lets you inspect the rewritten repo before pushing
+> - Combine `--save-dir` and `--dest` to save a local copy and push
+> - `Co-authored-by` is case-sensitive; use email to narrow matches
+> - `--save-dir` without `--dest` automatically implies `--no-push`
