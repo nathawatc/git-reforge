@@ -1,4 +1,4 @@
-# GitHub To Codeberg
+# GitHub to Codeberg
 
 Migrate repositories from GitHub to Codeberg with history rewriting.
 
@@ -67,7 +67,7 @@ chmod +x src/main.sh
 | `--no-push`             | Rewrite history locally but skip pushing to Codeberg               |
 | `-h, --help`            | Show help message                                                  |
 
-### Co-authored-by Options
+### Co-Authored-by Options
 
 | Option                         | Description                                                              |
 | ------------------------------ | ------------------------------------------------------------------------ |
@@ -189,7 +189,7 @@ When using `-i` flag, you can review each commit and choose:
 | `D` | Apply defaults to all remaining    |
 | `Q` | Quit and apply changes made so far |
 
-### Co-authored-by Interactive Mode
+### Co-Authored-by Interactive Mode
 
 With `--coauthor-mode interactive`, you can review each affected commit:
 
