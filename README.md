@@ -40,6 +40,10 @@ chmod +x src/main.sh
 
 ## Usage
 
+> [!NOTE]
+>
+> For Windows user please using Git Bash or WSL to run the script.
+
 ```bash
 ./src/main.sh [OPTIONS]
 ```
