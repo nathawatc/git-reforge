@@ -1,88 +1,102 @@
 # CLAUDE.md
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+Guidance for Claude Code working in this repo.
 
 ## Project Overview
 
-Pure Bash migration script that rewrites GitHub repository commit history and pushes it to Codeberg. Supports author identity rewriting, Co-authored-by trailer manipulation, GPG/SSH re-signing, and batch/interactive workflows.
+Go migration tool. Rewrites GitHub commit history → pushes to Codeberg. Replaces `src/main.sh`.
+Supports author rewriting, Co-authored-by trailer manipulation, GPG/SSH re-signing,
+batch/interactive workflows.
 
-## Common Commands
+## Build Commands
 
 ```bash
-# Run migration
-./src/main.sh -s <github-url> -d <codeberg-url> -o "OldName" -e myuser@noreply.codeberg.org
+# Build binary
+go build .
 
-# Interactive mode
-./src/main.sh -s <url> -d <url> -o "OldName" -e <email> -i
+# Run
+./github-to-codeberg --help
+./github-to-codeberg -s <github-url> -d <codeberg-url> -o "OldName" -e myuser@noreply.codeberg.org
 
-# Local-only rewrite (no push)
-./src/main.sh -s <url> -o "OldName" -e <email> --no-push --save-dir /path/to/output
+# Run tests (when written)
+go test ./...
 ```
 
 ## Architecture
 
 ```text
-src/
-  main.sh              # Entry point — sources libs, registers trap, calls main()
-  lib/
-    logging.sh         # Color constants + log_* functions (info/success/warning/error/header)
-    config.sh          # All global state + associative arrays (COMMIT_OVERRIDES, COMMIT_MESSAGES, etc.) 
-    args.sh            # show_help(), parse_args(), validate_args()
-    git_ops.sh         # clone_repository(), push_to_destination(), save_repository(), cleanup()
-    rewrite.sh         # generate_interactive_filter(), generate_message_filter(), rewrite_commits_batch/interactive()
-    coauthor.sh        # interactive_coauthor_edit(), _build_coauthor_msg_filter(), rewrite_coauthors_*()
-    signing.sh         # resign_tags(), handle_signing()
-    ui.sh              # display_config(), interactive_edit(), show_summary()
+cmd/migrate/main.go     # CLI entry point — urfave/cli flags, orchestrates flow
+main.go                 # Build shim — runs cmd/migrate
+pkg/
+  config/config.go      # Config struct, CommitOverrides/CommitMessages maps keyed by plumbing.Hash
+  git/clone.go          # Clone (bare mirror → working), push, save
+  logging/logger.go     # slog wrapper with ANSI color codes
+  rewrite/batch.go      # RewriteCommitsBatch, RewriteCommitsInteractive, filter generation
+  coauthor/batch.go     # RunCoauthorPhase, batch/interactive coauthor filtering
+  signing/commit.go     # HandleSigning (keep/none/gpg/ssh), ResignTags
+  ui/display.go         # DisplayConfig, ShowSummary
+  ui/interactive.go     # InteractiveEdit — per-commit TTY menu loop
 ```
 
-### Execution Flow (main.sh)
+### Execution Flow
 
-1. Source libs in dependency order: logging → config → args → git_ops → rewrite → coauthor → signing → ui
-2. parse_args → validate_args → check_dependencies → display_config
-3. clone_repository (bare mirror → working clone)
-4. Interactive: interactive_edit → rewrite_commits_interactive
-5. Batch: rewrite_commits_batch
-6. run_coauthor_phase
-7. handle_signing
-8. save_repository (if --save-dir) / push_to_destination (if not --no-push)
+1. `main()` → parse args via urfave/cli → validateArgs → checkDependencies
+2. `git.Clone(cfg)` → bare mirror at `$TEMP_DIR/repo.git`, working at `$TEMP_DIR/working`
+3. Batch: `rewrite.RewriteCommitsBatch` | Interactive: `ui.InteractiveEdit` → `rewrite.RewriteCommitsInteractive`
+4. `coauthor.RunCoauthorPhase`
+5. `signing.HandleSigning` → ResignTags
+6. `git.Save` or `git.Push` → `ui.ShowSummary`
+7. `os.RemoveAll(cfg.TempDir)` on exit
 
-### Key Patterns
+### Key Decisions
 
-**Git filter-branch rewriting**: Rewrite functions generate temporary shell scripts consumed by `git filter-branch --env-filter` or `--msg-filter`. Scripts are written to `$TEMP_DIR/` and executed via `source` (env-filter) or `bash` (msg-filter).
+| Decision       | Choice                                                                             |
+| -------------- | ---------------------------------------------------------------------------------- |
+| Git rewriting  | Uses `git filter-branch` via `exec.Command` (not pure go-git plumbing for rewrite) |
+| Config state   | Context struct passed as first arg to functions that need it                       |
+| Error handling | Functions return `error`, CLI layer logs and exits with code 1                     |
+| Temp dir       | Single `os.MkdirTemp()` root with `repo.git` and `working` subdirs                 |
+| Logger         | `log/slog` stdlib with ANSI colors embedded in message strings                     |
+| CLI flags      | `urfave/cli/v2` with explicit `&cli.StringFlag{}` / `&cli.BoolFlag{}` types        |
 
-**Per-commit overrides**: Interactive mode populates `COMMIT_OVERRIDES` (hash → `"name"$'\x1F'"email"`) and `COMMIT_MESSAGES` (hash → message). Rewrite functions emit case-statement filter scripts mapping each commit hash to its override.
+### Commit Hash Handling
 
-**Generated filter script rules**:
+Uses `plumbing.Hash` from `github.com/go-git/go-git/v5/plumbing`. Interactive state maps:
 
-- Commit message text: write to `$TEMP_DIR/msg_<hash>.txt` with `printf '%s'`, read back with `cat`
-- User strings embedded in heredoc double-quotes: escape `\` → `"` → `$` before interpolation
-- Every `case "$GIT_COMMIT" in` block needs a `*) ;;` default arm
-- After filter-branch runs exporting helper vars, immediately `unset` them
+- `CommitOverrides map[plumbing.Hash]CommitOverride` — name, email, skip flag
+- `CommitMessages map[plumbing.Hash]string`
+- `CoauthorActions map[plumbing.Hash]string` — rewrite/remove/skip
 
-**Global state**: All mutable state lives in `config.sh`. Interactive state uses associative arrays: `COMMIT_OVERRIDES`, `COMMIT_MESSAGES`, `COMMIT_COAUTHOR_ACTIONS`.
+### Signing Modes
 
-**No default for --old-name**: Fails loudly if omitted. Empty string entries in `OLD_NAMES` are rejected — they would match every commit via exact string comparison.
+| Mode   | Implementation                                                                                      |
+| ------ | --------------------------------------------------------------------------------------------------- |
+| `keep` | No-op                                                                                               |
+| `none` | `git filter-branch` env-filter touching `GIT_COMMITTER_DATE` to recreate objects without signatures |
+| `gpg`  | `git filter-branch --commit-filter` with `git commit-tree -S"$KEY"`                                 |
+| `ssh`  | `git config gpg.format ssh` + `git filter-branch --commit-filter` with `git commit-tree -S`         |
 
-## Shell Conventions
+### Tag Handling
 
-- Strict mode: `set -euo pipefail` in main.sh
-- `printf '%s' "$value"` for data pipelines; `echo -e` only for colored terminal output
-- `read -r -p "..." var </dev/tty` for interactive prompts (required for piped stdin)
-- `local` declared before use in every function
-- Double-sourcing guard in every lib: `[[ -n "${_LIB_*_LOADED:-}" ]] && return 0`
-- All failures: `log_error` + `exit 1`
+Always uses explicit refspec: `git push --force origin "refs/tags/*:refs/tags/*"` — never `--tags`,
+which silently skips annotated tags whose SHA changed after re-signing.
 
-## Signing Modes
+## Common Commands
 
-| Mode   | Behavior                                                       |
-| ------ | -------------------------------------------------------------- |
-| `keep` | No filter-branch pass                                          |
-| `none` | `--env-filter` + `gpg.sign false` to strip signatures          |
-| `gpg`  | `--commit-filter` with `git commit-tree -S"$KEY"`              |
-| `ssh`  | `gpg.format ssh` + `--commit-filter` with `git commit-tree -S` |
+```bash
+# Basic migration
+./github-to-codeberg -s https://github.com/user/repo.git -d ssh://git@codeberg.org/user/repo.git -o
+"OldName" -e user@noreply.codeberg.org
 
-**Tag pushing**: Always use explicit refspec `git push --force origin "refs/tags/*:refs/tags/*"` — never `--tags`, as `--tags` silently skips annotated tags whose SHA changed after re-signing.
+# Interactive mode
+./github-to-codeberg -s <url> -d <url> -o "OldName" -e <email> -i
 
-## Co-authored-by Filtering
+# Local-only rewrite
+./github-to-codeberg -s <url> -o "OldName" -e <email> --no-push --save-dir /path/to/output
 
-Uses `sed -E` with pattern `Co-authored-by: <name> <email>` or `Co-authored-by: <name> <[^>]*>` for name-only matching. Rewrite/remove actions applied via `--msg-filter`. Interactive mode stores per-commit decisions in `COMMIT_COAUTHOR_ACTIONS`.
+# With SSH signing
+./github-to-codeberg -s <url> -d <url> -o "OldName" -e <email> --sign-mode ssh --ssh-key /path/to/key
+
+# With GPG signing
+./github-to-codeberg -s <url> -d <url> -o "OldName" -e <email> --sign-mode gpg --gpg-key ABCD1234
+```
