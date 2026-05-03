@@ -81,7 +81,9 @@ func DisplayConfig(cfg *config.Config) {
 
 	fmt.Print("Proceed with migration? [y/N] ")
 	var reply string
-	fmt.Scanln(&reply)
+	if _, err := fmt.Scanln(&reply); err != nil {
+		reply = ""
+	}
 	if !strings.EqualFold(reply, "Y") {
 		log.Info("Migration cancelled")
 		os.Exit(0)
@@ -115,9 +117,10 @@ func ShowSummary(cfg *config.Config) {
 			rewriteCount := 0
 			removeCount := 0
 			for _, action := range cfg.CoauthorActions {
-				if action == "rewrite" {
+				switch action {
+				case "rewrite":
 					rewriteCount++
-				} else if action == "remove" {
+				case "remove":
 					removeCount++
 				}
 			}

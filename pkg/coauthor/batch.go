@@ -99,24 +99,24 @@ func buildCoauthorMsgFilter(cfg *config.Config, outputPath string, modeType stri
 
 	if modeType == "batch" {
 		if cfg.CoauthorMode == "remove" {
-			script.WriteString(fmt.Sprintf("printf '%%s' \"$input\" | sed -E '/^%s$/d'\n", sedMatchPattern))
+			fmt.Fprintf(&script, "printf '%%s' \"$input\" | sed -E '/^%s$/d'\n", sedMatchPattern)
 		} else {
-			script.WriteString(fmt.Sprintf("printf '%%s' \"$input\" | sed -E 's/^%s$/%s/'\n", sedMatchPattern, newTrailer))
+			fmt.Fprintf(&script, "printf '%%s' \"$input\" | sed -E 's/^%s$/%s/'\n", sedMatchPattern, newTrailer)
 		}
 	} else {
 		script.WriteString("case \"$GIT_COMMIT\" in\n")
 		for hash, action := range cfg.CoauthorActions {
 			switch action {
 			case "remove":
-				script.WriteString(fmt.Sprintf("    %s)\n", hash.String()))
-				script.WriteString(fmt.Sprintf("        printf '%%s' \"$input\" | sed -E '/^%s$/d'\n", sedMatchPattern))
+				fmt.Fprintf(&script, "    %s)\n", hash.String())
+				fmt.Fprintf(&script, "        printf '%%s' \"$input\" | sed -E '/^%s$/d'\n", sedMatchPattern)
 				script.WriteString("        ;;\n")
 			case "rewrite":
-				script.WriteString(fmt.Sprintf("    %s)\n", hash.String()))
-				script.WriteString(fmt.Sprintf("        printf '%%s' \"$input\" | sed -E 's/^%s$/%s/'\n", sedMatchPattern, newTrailer))
+				fmt.Fprintf(&script, "    %s)\n", hash.String())
+				fmt.Fprintf(&script, "        printf '%%s' \"$input\" | sed -E 's/^%s$/%s/'\n", sedMatchPattern, newTrailer)
 				script.WriteString("        ;;\n")
 			default:
-				script.WriteString(fmt.Sprintf("    %s)\n", hash.String()))
+				fmt.Fprintf(&script, "    %s)\n", hash.String())
 				script.WriteString("        printf '%s' \"$input\"\n")
 				script.WriteString("        ;;\n")
 			}
@@ -306,7 +306,9 @@ func promptLoop(commitHash string, cfg *config.Config) string {
 
 		var choice string
 		fmt.Print("  Choice [R/D/S/RA/DA/Q]: ")
-		fmt.Scanln(&choice)
+		if _, err := fmt.Scanln(&choice); err != nil {
+			choice = ""
+		}
 
 		hash := plumbing.NewHash(commitHash)
 

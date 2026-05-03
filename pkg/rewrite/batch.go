@@ -159,7 +159,7 @@ func generateMessageFilter(cfg *config.Config) (string, error) {
 			if err := os.WriteFile(msgFile, []byte(msg), 0644); err != nil {
 				return "", fmt.Errorf("failed to write message file: %w", err)
 			}
-			script.WriteString(fmt.Sprintf("    %s)\n        cat \"%s\"\n        ;;\n", hash.String(), msgFile))
+			fmt.Fprintf(&script, "    %s)\n        cat \"%s\"\n        ;;\n", hash.String(), msgFile)
 		}
 		script.WriteString("    *)\n        printf '%s' \"$original_msg\"\n        ;;\nesac\n")
 	} else {

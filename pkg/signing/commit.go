@@ -217,11 +217,6 @@ func getTagMessage(tmpDir string, tagName string) (string, string, error) {
 	}
 	body := strings.TrimSpace(string(output))
 
-	msg := subject
-	if body != "" {
-		msg = msg + "\n\n" + body
-	}
-
 	return subject, body, nil
 }
 
