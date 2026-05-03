@@ -12,7 +12,6 @@ import (
 	"github.com/go-git/go-git/v5/plumbing"
 
 	"github-to-codeberg/pkg/config"
-	"github-to-codeberg/pkg/util"
 )
 
 func Clone(cfg *config.Config) error {
@@ -149,7 +148,7 @@ func containsCoauthorWithEmail(msg string, name string, email string) bool {
 }
 
 func containsPattern(msg string, pattern string) bool {
-	lines := util.SplitLines(msg)
+	lines := strings.Split(msg, "\n")
 	for _, line := range lines {
 		if strings.HasPrefix(line, pattern) {
 			return true
@@ -175,7 +174,11 @@ func GetCommitInfo(tmpDir string, hash plumbing.Hash) (authorName, authorEmail, 
 	authorName = commit.Author.Name
 	authorEmail = commit.Author.Email
 	authorDate = commit.Author.When.Format("2006-01-02 15:04:05 -0700")
-	subject = util.SplitFirstLine(commit.Message)
+	if i := strings.Index(commit.Message, "\n"); i >= 0 {
+		subject = commit.Message[:i]
+	} else {
+		subject = commit.Message
+	}
 	body = commit.Message
 
 	return
@@ -192,7 +195,7 @@ func ListAnnotatedTags(tmpDir string) ([]string, error) {
 		return nil, fmt.Errorf("git tag failed: %w", err)
 	}
 
-	lines := util.SplitLines(string(output))
+	lines := strings.Split(string(output), "\n")
 	for _, tag := range lines {
 		if tag == "" {
 			continue

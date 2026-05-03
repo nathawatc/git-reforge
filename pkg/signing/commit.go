@@ -6,8 +6,7 @@ import (
 	"strings"
 
 	"github-to-codeberg/pkg/config"
-	"github-to-codeberg/pkg/rewrite"
-	"github-to-codeberg/pkg/util"
+	"github-to-codeberg/pkg/shell"
 )
 
 func HandleSigning(cfg *config.Config) error {
@@ -34,7 +33,7 @@ func handleNone(cfg *config.Config) error {
 
 	// Disable signing locally
 	cmd := exec.Command("git", "config", "gpg.sign", "false")
-	cmd.Dir = cfg.TempDir + "/working"
+	cmd.Dir = cfg.WorkDir()
 	if err := cmd.Run(); err != nil {
 		return fmt.Errorf("git config gpg.sign failed: %w", err)
 	}
@@ -46,14 +45,14 @@ func handleNone(cfg *config.Config) error {
 	cmd = exec.Command("git", "filter-branch", "-f", "--env-filter", `
 export GIT_COMMITTER_DATE="$GIT_COMMITTER_DATE"
 `, "--tag-name-filter", "cat", "--", "--all")
-	cmd.Dir = cfg.TempDir + "/working"
+	cmd.Dir = cfg.WorkDir()
 	if err := cmd.Run(); err != nil {
 		return fmt.Errorf("filter-branch failed: %w", err)
 	}
 
 	// Unset config
 	cmd = exec.Command("git", "config", "--unset", "gpg.sign")
-	cmd.Dir = cfg.TempDir + "/working"
+	cmd.Dir = cfg.WorkDir()
 	if err := cmd.Run(); err != nil {
 		return fmt.Errorf("git config --unset failed: %w", err)
 	}
@@ -68,20 +67,20 @@ func handleGPG(cfg *config.Config) error {
 	log.Info("Re-signing all commits with GPG key: " + cfg.GPGKey)
 
 	cmd := exec.Command("git", "config", "user.signingkey", cfg.GPGKey)
-	cmd.Dir = cfg.TempDir + "/working"
+	cmd.Dir = cfg.WorkDir()
 	if err := cmd.Run(); err != nil {
 		return fmt.Errorf("git config user.signingkey failed: %w", err)
 	}
 
-	commitFilter := fmt.Sprintf(`git commit-tree -S"%s" "$@"`, rewrite.EscapeShell(cfg.GPGKey))
+	commitFilter := fmt.Sprintf(`git commit-tree -S"%s" "$@"`, shell.EscapeShell(cfg.GPGKey))
 	cmd = exec.Command("git", "filter-branch", "-f", "--commit-filter", commitFilter, "--tag-name-filter", "cat", "--", "--all")
-	cmd.Dir = cfg.TempDir + "/working"
+	cmd.Dir = cfg.WorkDir()
 	if err := cmd.Run(); err != nil {
 		return fmt.Errorf("filter-branch failed: %w", err)
 	}
 
 	cmd = exec.Command("git", "config", "--unset", "user.signingkey")
-	cmd.Dir = cfg.TempDir + "/working"
+	cmd.Dir = cfg.WorkDir()
 	if err := cmd.Run(); err != nil {
 		return fmt.Errorf("git config --unset user.signingkey failed: %w", err)
 	}
@@ -96,31 +95,31 @@ func handleSSH(cfg *config.Config) error {
 	log.Info("Re-signing all commits with SSH key: " + cfg.SSHKey)
 
 	cmd := exec.Command("git", "config", "gpg.format", "ssh")
-	cmd.Dir = cfg.TempDir + "/working"
+	cmd.Dir = cfg.WorkDir()
 	if err := cmd.Run(); err != nil {
 		return fmt.Errorf("git config gpg.format failed: %w", err)
 	}
 
-	cmd = exec.Command("git", "config", "user.signingkey", rewrite.EscapeShell(cfg.SSHKey))
-	cmd.Dir = cfg.TempDir + "/working"
+	cmd = exec.Command("git", "config", "user.signingkey", shell.EscapeShell(cfg.SSHKey))
+	cmd.Dir = cfg.WorkDir()
 	if err := cmd.Run(); err != nil {
 		return fmt.Errorf("git config user.signingkey failed: %w", err)
 	}
 
 	cmd = exec.Command("git", "filter-branch", "-f", "--commit-filter", `git commit-tree -S "$@"`, "--tag-name-filter", "cat", "--", "--all")
-	cmd.Dir = cfg.TempDir + "/working"
+	cmd.Dir = cfg.WorkDir()
 	if err := cmd.Run(); err != nil {
 		return fmt.Errorf("filter-branch failed: %w", err)
 	}
 
 	cmd = exec.Command("git", "config", "--unset", "user.signingkey")
-	cmd.Dir = cfg.TempDir + "/working"
+	cmd.Dir = cfg.WorkDir()
 	if err := cmd.Run(); err != nil {
 		return fmt.Errorf("git config --unset user.signingkey failed: %w", err)
 	}
 
 	cmd = exec.Command("git", "config", "--unset", "gpg.format")
-	cmd.Dir = cfg.TempDir + "/working"
+	cmd.Dir = cfg.WorkDir()
 	if err := cmd.Run(); err != nil {
 		return fmt.Errorf("git config --unset gpg.format failed: %w", err)
 	}
@@ -134,20 +133,20 @@ func ResignTags(cfg *config.Config) error {
 
 	// Get all annotated tags
 	cmd := exec.Command("git", "tag")
-	cmd.Dir = cfg.TempDir + "/working"
+	cmd.Dir = cfg.WorkDir()
 	output, err := cmd.Output()
 	if err != nil {
 		return fmt.Errorf("git tag failed: %w", err)
 	}
 
 	var annotatedTags []string
-	lines := util.SplitLines(string(output))
+	lines := strings.Split(string(output), "\n")
 	for _, tag := range lines {
 		if tag == "" {
 			continue
 		}
 		cmd = exec.Command("git", "cat-file", "-t", "refs/tags/"+tag)
-		cmd.Dir = cfg.TempDir + "/working"
+		cmd.Dir = cfg.WorkDir()
 		out, err := cmd.Output()
 		if err != nil {
 			continue
@@ -242,7 +241,7 @@ func stripTag(cfg *config.Config, tagName string) error {
 
 	msg := body
 	cmd := exec.Command("git", "tag", "-f", "-a", tagName, tagCommit, "-m", msg)
-	cmd.Dir = cfg.TempDir + "/working"
+	cmd.Dir = cfg.WorkDir()
 	if err := cmd.Run(); err != nil {
 		return fmt.Errorf("git tag strip failed: %w", err)
 	}
@@ -260,7 +259,7 @@ func resignTagGPG(cfg *config.Config, tagName string) error {
 	}
 
 	cmd := exec.Command("git", "tag", "-f", "-s", tagName, "-u", cfg.GPGKey, tagCommit, "-m", body)
-	cmd.Dir = cfg.TempDir + "/working"
+	cmd.Dir = cfg.WorkDir()
 	if err := cmd.Run(); err != nil {
 		return fmt.Errorf("git tag resign GPG failed: %w", err)
 	}
@@ -278,7 +277,7 @@ func resignTagSSH(cfg *config.Config, tagName string) error {
 	}
 
 	cmd := exec.Command("git", "tag", "-f", "-s", tagName, tagCommit, "-m", body)
-	cmd.Dir = cfg.TempDir + "/working"
+	cmd.Dir = cfg.WorkDir()
 	if err := cmd.Run(); err != nil {
 		return fmt.Errorf("git tag resign SSH failed: %w", err)
 	}

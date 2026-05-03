@@ -14,28 +14,32 @@ batch/interactive workflows.
 # Build binary
 go build .
 
-# Run
-./github-to-codeberg --help
-./github-to-codeberg -s <github-url> -d <codeberg-url> -o "OldName" -e myuser@noreply.codeberg.org
-
-# Run tests (when written)
+# Run tests
 go test ./...
+
+# Run a specific test
+go test ./pkg/shell/... -v
+
+# Lint
+golangci-lint run
 ```
 
 ## Architecture
 
 ```text
-cmd/migrate/main.go     # CLI entry point — urfave/cli flags, orchestrates flow
-main.go                 # Build shim — runs cmd/migrate
+main.go                 # CLI entry point — urfave/cli flags, orchestrates flow
 pkg/
-  config/config.go      # Config struct, CommitOverrides/CommitMessages maps keyed by plumbing.Hash
+  config/config.go      # Config struct, InteractiveState, WorkDir() method
   git/clone.go          # Clone (bare mirror → working), push, save
-  logging/logger.go     # slog wrapper with ANSI color codes
+  logging/logger.go     # slog wrapper with ANSI colors (imports pkg/ui)
   rewrite/batch.go      # RewriteCommitsBatch, RewriteCommitsInteractive, filter generation
   coauthor/batch.go     # RunCoauthorPhase, batch/interactive coauthor filtering
   signing/commit.go     # HandleSigning (keep/none/gpg/ssh), ResignTags
-  ui/display.go         # DisplayConfig, ShowSummary
-  ui/interactive.go     # InteractiveEdit — per-commit TTY menu loop
+  shell/escape.go       # EscapeShell, EscapeSed — shared shell escaping utilities
+  ui/
+    colors.go           # ANSI color constants (Red, Green, Yellow, Bold, NC, etc.)
+    display.go          # DisplayConfig, ShowSummary
+    interactive.go      # InteractiveEdit — per-commit TTY menu loop
 ```
 
 ### Execution Flow
@@ -53,19 +57,21 @@ pkg/
 | Decision       | Choice                                                                             |
 | -------------- | ---------------------------------------------------------------------------------- |
 | Git rewriting  | Uses `git filter-branch` via `exec.Command` (not pure go-git plumbing for rewrite) |
-| Config state   | Context struct passed as first arg to functions that need it                       |
+| Config state   | Context struct passed as first arg; interactive state in `cfg.State` field         |
 | Error handling | Functions return `error`, CLI layer logs and exits with code 1                     |
-| Temp dir       | Single `os.MkdirTemp()` root with `repo.git` and `working` subdirs                 |
-| Logger         | `log/slog` stdlib with ANSI colors embedded in message strings                     |
+| Temp dir       | `os.MkdirTemp()` root; `cfg.WorkDir()` returns `$TEMP_DIR/working`                 |
+| Logger         | `log/slog` stdlib with ANSI colors via `pkg/ui` constants                          |
 | CLI flags      | `urfave/cli/v2` with explicit `&cli.StringFlag{}` / `&cli.BoolFlag{}` types        |
+| Shell escaping | `pkg/shell/escape.go` — EscapeShell for bash, EscapeSed for sed                    |
+| Colors         | Single source: `pkg/ui/colors.go` — all packages import `pkg/ui` for constants     |
 
-### Commit Hash Handling
+### Interactive State
 
-Uses `plumbing.Hash` from `github.com/go-git/go-git/v5/plumbing`. Interactive state maps:
+Runtime choices from interactive mode live in `InteractiveState`, accessed via `cfg.State`:
 
-- `CommitOverrides map[plumbing.Hash]CommitOverride` — name, email, skip flag
-- `CommitMessages map[plumbing.Hash]string`
-- `CoauthorActions map[plumbing.Hash]string` — rewrite/remove/skip
+- `cfg.State.CommitOverrides map[plumbing.Hash]CommitOverride` — per-commit name/email/skip
+- `cfg.State.CommitMessages map[plumbing.Hash]string` — per-commit message overrides
+- `cfg.State.CoauthorActions map[plumbing.Hash]string` — coauthor rewrite/remove/skip decisions
 
 ### Signing Modes
 

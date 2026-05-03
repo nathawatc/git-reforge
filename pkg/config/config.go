@@ -24,10 +24,8 @@ type Config struct {
 	CoauthorNewName  string
 	CoauthorNewEmail string
 
-	// Interactive state
-	CommitOverrides map[plumbing.Hash]CommitOverride
-	CommitMessages  map[plumbing.Hash]string
-	CoauthorActions map[plumbing.Hash]string
+	// Interactive state — extracted to allow Config to be a pure config carrier
+	State *InteractiveState
 
 	// Internal
 	TempDir string
@@ -40,6 +38,12 @@ type Config struct {
 	}
 }
 
+type InteractiveState struct {
+	CommitOverrides map[plumbing.Hash]CommitOverride
+	CommitMessages  map[plumbing.Hash]string
+	CoauthorActions map[plumbing.Hash]string
+}
+
 type CommitOverride struct {
 	Name  string
 	Email string
@@ -48,9 +52,15 @@ type CommitOverride struct {
 
 func New() *Config {
 	return &Config{
-		SignMode:        "keep",
-		CommitOverrides: make(map[plumbing.Hash]CommitOverride),
-		CommitMessages:  make(map[plumbing.Hash]string),
-		CoauthorActions: make(map[plumbing.Hash]string),
+		SignMode: "keep",
+		State: &InteractiveState{
+			CommitOverrides: make(map[plumbing.Hash]CommitOverride),
+			CommitMessages:  make(map[plumbing.Hash]string),
+			CoauthorActions: make(map[plumbing.Hash]string),
+		},
 	}
+}
+
+func (c *Config) WorkDir() string {
+	return c.TempDir + "/working"
 }

@@ -10,7 +10,6 @@ import (
 	"github.com/go-git/go-git/v5/plumbing"
 
 	"github-to-codeberg/pkg/config"
-	"github-to-codeberg/pkg/util"
 )
 
 func InteractiveEdit(cfg *config.Config) {
@@ -52,7 +51,7 @@ func InteractiveEdit(cfg *config.Config) {
 
 		hash := plumbing.NewHash(commitHash)
 		msgStatus := "(unchanged)"
-		if _, ok := cfg.CommitMessages[hash]; ok {
+		if _, ok := cfg.State.CommitMessages[hash]; ok {
 			msgStatus = fmt.Sprintf("%s(customized)%s", Yellow, NC)
 		}
 		fmt.Printf("  %sDefault changes:%s\n", Bold, NC)
@@ -87,7 +86,7 @@ func getCommitsByAuthor(tmpDir string, authorName string) []string {
 	}
 
 	var commits []string
-	lines := util.SplitLines(string(output))
+	lines := strings.Split(string(output), "\n")
 	for _, line := range lines {
 		if line != "" {
 			commits = append(commits, line)
@@ -159,7 +158,7 @@ func promptCommitChoice(commitHash string, cfg *config.Config) string {
 				customEmail = cfg.NewEmail
 			}
 
-			cfg.CommitOverrides[hash] = config.CommitOverride{
+			cfg.State.CommitOverrides[hash] = config.CommitOverride{
 				Name:  customName,
 				Email: customEmail,
 			}
@@ -175,7 +174,7 @@ func promptCommitChoice(commitHash string, cfg *config.Config) string {
 			input, _ := reader.ReadString('\n')
 			customMessage := strings.TrimSpace(input)
 			if customMessage != "" {
-				cfg.CommitMessages[hash] = customMessage
+				cfg.State.CommitMessages[hash] = customMessage
 				cfg.Logger.Success("Custom message saved for commit " + commitHash[:12])
 			} else {
 				cfg.Logger.Info("Keeping original message for commit " + commitHash[:12])
@@ -183,19 +182,19 @@ func promptCommitChoice(commitHash string, cfg *config.Config) string {
 			fmt.Println()
 			return ""
 		case "A":
-			cfg.CommitOverrides[hash] = config.CommitOverride{
+			cfg.State.CommitOverrides[hash] = config.CommitOverride{
 				Name:  cfg.NewName,
 				Email: cfg.NewEmail,
 			}
 			cfg.Logger.Success("Changes will be applied to commit " + commitHash[:12])
 			return ""
 		case "S":
-			cfg.CommitOverrides[hash] = config.CommitOverride{Skip: true}
+			cfg.State.CommitOverrides[hash] = config.CommitOverride{Skip: true}
 			cfg.Logger.Info("Commit " + commitHash[:12] + " will be kept unchanged")
 			return ""
 		case "D":
 			cfg.Logger.Info("Applying default changes to all remaining commits...")
-			cfg.CommitOverrides[hash] = config.CommitOverride{
+			cfg.State.CommitOverrides[hash] = config.CommitOverride{
 				Name:  cfg.NewName,
 				Email: cfg.NewEmail,
 			}

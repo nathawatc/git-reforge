@@ -10,17 +10,8 @@ import (
 	"github.com/go-git/go-git/v5/plumbing"
 
 	"github-to-codeberg/pkg/config"
-	"github-to-codeberg/pkg/util"
-)
-
-const (
-	Red    = "\033[1;31m"
-	Green  = "\033[1;32m"
-	Yellow = "\033[1;33m"
-	Blue   = "\033[0;34m"
-	Cyan   = "\033[0;36m"
-	Bold   = "\033[1m"
-	NC     = "\033[0m"
+	"github-to-codeberg/pkg/shell"
+	"github-to-codeberg/pkg/ui"
 )
 
 func RewriteBatch(cfg *config.Config) error {
@@ -40,7 +31,7 @@ func RewriteBatch(cfg *config.Config) error {
 	cmd := exec.Command("git", "filter-branch", "-f",
 		"--msg-filter", "bash "+coauthorMsgFilter,
 		"--tag-name-filter", "cat", "--", "--all")
-	cmd.Dir = cfg.TempDir + "/working"
+	cmd.Dir = cfg.WorkDir()
 	if err := cmd.Run(); err != nil {
 		return fmt.Errorf("filter-branch failed: %w", err)
 	}
@@ -53,7 +44,7 @@ func RewriteInteractive(cfg *config.Config) error {
 	if cfg.CoauthorMode != "interactive" {
 		return nil
 	}
-	if len(cfg.CoauthorActions) == 0 {
+	if len(cfg.State.CoauthorActions) == 0 {
 		return nil
 	}
 
@@ -65,11 +56,11 @@ func RewriteInteractive(cfg *config.Config) error {
 		return err
 	}
 
-	log.Info(fmt.Sprintf("Applying %d Co-authored-by decision(s)...", len(cfg.CoauthorActions)))
+	log.Info(fmt.Sprintf("Applying %d Co-authored-by decision(s)...", len(cfg.State.CoauthorActions)))
 	cmd := exec.Command("git", "filter-branch", "-f",
 		"--msg-filter", "bash "+coauthorMsgFilter,
 		"--tag-name-filter", "cat", "--", "--all")
-	cmd.Dir = cfg.TempDir + "/working"
+	cmd.Dir = cfg.WorkDir()
 	if err := cmd.Run(); err != nil {
 		return fmt.Errorf("filter-branch failed: %w", err)
 	}
@@ -84,17 +75,17 @@ func buildCoauthorMsgFilter(cfg *config.Config, outputPath string, modeType stri
 	script.WriteString("#!/usr/bin/env bash\n")
 	script.WriteString("input=$(cat)\n")
 
-	sedEscapedName := escapeSed(cfg.CoauthorOldName)
+	sedEscapedName := shell.EscapeSed(cfg.CoauthorOldName)
 	var sedMatchPattern string
 	if cfg.CoauthorOldEmail != "" {
-		sedEscapedEmail := escapeSed(cfg.CoauthorOldEmail)
+		sedEscapedEmail := shell.EscapeSed(cfg.CoauthorOldEmail)
 		sedMatchPattern = "Co-authored-by: " + sedEscapedName + " <" + sedEscapedEmail + ">"
 	} else {
 		sedMatchPattern = "Co-authored-by: " + sedEscapedName + " <[^>]*>"
 	}
 
-	sedEscapedNewName := escapeSed(cfg.CoauthorNewName)
-	sedEscapedNewEmail := escapeSed(cfg.CoauthorNewEmail)
+	sedEscapedNewName := shell.EscapeSed(cfg.CoauthorNewName)
+	sedEscapedNewEmail := shell.EscapeSed(cfg.CoauthorNewEmail)
 	newTrailer := "Co-authored-by: " + sedEscapedNewName + " <" + sedEscapedNewEmail + ">"
 
 	if modeType == "batch" {
@@ -105,7 +96,7 @@ func buildCoauthorMsgFilter(cfg *config.Config, outputPath string, modeType stri
 		}
 	} else {
 		script.WriteString("case \"$GIT_COMMIT\" in\n")
-		for hash, action := range cfg.CoauthorActions {
+		for hash, action := range cfg.State.CoauthorActions {
 			switch action {
 			case "remove":
 				fmt.Fprintf(&script, "    %s)\n", hash.String())
@@ -133,15 +124,6 @@ func buildCoauthorMsgFilter(cfg *config.Config, outputPath string, modeType stri
 	return nil
 }
 
-func escapeSed(s string) string {
-	s = strings.ReplaceAll(s, "\\", "\\\\")
-	s = strings.ReplaceAll(s, "/", "\\/")
-	s = strings.ReplaceAll(s, "[", "\\[")
-	s = strings.ReplaceAll(s, "]", "\\]")
-	s = strings.ReplaceAll(s, ".", "\\.")
-	return s
-}
-
 func RunCoauthorPhase(cfg *config.Config) error {
 	if cfg.CoauthorMode == "" {
 		return nil
@@ -166,7 +148,7 @@ func InteractiveCoauthorEdit(cfg *config.Config) {
 
 	// Get all commits and filter
 	cmd := exec.Command("git", "log", "--all", "--format=%H")
-	cmd.Dir = cfg.TempDir + "/working"
+	cmd.Dir = cfg.WorkDir()
 	output, err := cmd.Output()
 	if err != nil {
 		log.Warning("Failed to get commit list")
@@ -174,7 +156,7 @@ func InteractiveCoauthorEdit(cfg *config.Config) {
 	}
 
 	var matchingCommits []string
-	lines := util.SplitLines(string(output))
+	lines := strings.Split(string(output), "\n")
 	for _, commitHash := range lines {
 		if commitHash == "" {
 			continue
@@ -199,21 +181,21 @@ func InteractiveCoauthorEdit(cfg *config.Config) {
 		authorName, authorDate, subject, body := getCommitDetails(cfg.TempDir, commitHash)
 		matchingLines := extractMatchingLines(body, cfg.CoauthorOldName, cfg.CoauthorOldEmail)
 
-		fmt.Printf("%s────────────────────────────────────────────────────────────────%s\n", Bold, NC)
-		fmt.Printf("%sCo-author commit %d of %d%s\n", Bold, current, len(matchingCommits), NC)
-		fmt.Printf("%s────────────────────────────────────────────────────────────────%s\n", Bold, NC)
-		fmt.Printf("  %sHash:%s    %s\n", Cyan, NC, commitHash[:12])
-		fmt.Printf("  %sAuthor:%s  %s\n", Cyan, NC, authorName)
-		fmt.Printf("  %sDate:%s    %s\n", Cyan, NC, authorDate)
-		fmt.Printf("  %sSubject:%s %s\n", Cyan, NC, subject)
-		fmt.Printf("  %sMatching trailer(s):%s\n", Cyan, NC)
+		fmt.Printf("%s────────────────────────────────────────────────────────────────%s\n", ui.Bold, ui.NC)
+		fmt.Printf("%sCo-author commit %d of %d%s\n", ui.Bold, current, len(matchingCommits), ui.NC)
+		fmt.Printf("%s────────────────────────────────────────────────────────────────%s\n", ui.Bold, ui.NC)
+		fmt.Printf("  %sHash:%s    %s\n", ui.Cyan, ui.NC, commitHash[:12])
+		fmt.Printf("  %sAuthor:%s  %s\n", ui.Cyan, ui.NC, authorName)
+		fmt.Printf("  %sDate:%s    %s\n", ui.Cyan, ui.NC, authorDate)
+		fmt.Printf("  %sSubject:%s %s\n", ui.Cyan, ui.NC, subject)
+		fmt.Printf("  %sMatching trailer(s):%s\n", ui.Cyan, ui.NC)
 		for _, line := range matchingLines {
-			fmt.Printf("    %s%s%s\n", Yellow, line, NC)
+			fmt.Printf("    %s%s%s\n", ui.Yellow, line, ui.NC)
 		}
 		fmt.Println()
 
-		if action, ok := cfg.CoauthorActions[plumbing.NewHash(commitHash)]; ok {
-			fmt.Printf("  %sCurrent decision:%s %s%s%s\n", Cyan, NC, Bold, action, NC)
+		if action, ok := cfg.State.CoauthorActions[plumbing.NewHash(commitHash)]; ok {
+			fmt.Printf("  %sCurrent decision:%s %s%s%s\n", ui.Cyan, ui.NC, ui.Bold, action, ui.NC)
 			fmt.Println()
 		}
 
@@ -279,7 +261,7 @@ func matchesCoauthor(body string, name string, email string) bool {
 
 func extractMatchingLines(body string, name string, email string) []string {
 	var matches []string
-	lines := util.SplitLines(body)
+	lines := strings.Split(body, "\n")
 	for _, line := range lines {
 		if email != "" {
 			if strings.Contains(line, "Co-authored-by: "+name+" <"+email+">") {
@@ -296,12 +278,12 @@ func extractMatchingLines(body string, name string, email string) []string {
 
 func promptLoop(commitHash string, cfg *config.Config) string {
 	for {
-		fmt.Printf("  %s[R]ewrite%s - Replace trailer with new Co-authored-by\n", Green, NC)
-		fmt.Printf("  %s[D]elete%s  - Remove the matching trailer line(s)\n", Red, NC)
-		fmt.Printf("  %s[S]kip%s   - Leave this commit unchanged\n", Blue, NC)
-		fmt.Printf("  %s[RA]%s     - Rewrite all remaining commits\n", Cyan, NC)
-		fmt.Printf("  %s[DA]%s     - Delete trailers in all remaining commits\n", Cyan, NC)
-		fmt.Printf("  %s[Q]uit%s   - Stop and apply decisions made so far\n", Red, NC)
+		fmt.Printf("  %s[R]ewrite%s - Replace trailer with new Co-authored-by\n", ui.Green, ui.NC)
+		fmt.Printf("  %s[D]elete%s  - Remove the matching trailer line(s)\n", ui.Red, ui.NC)
+		fmt.Printf("  %s[S]kip%s   - Leave this commit unchanged\n", ui.Blue, ui.NC)
+		fmt.Printf("  %s[RA]%s     - Rewrite all remaining commits\n", ui.Cyan, ui.NC)
+		fmt.Printf("  %s[DA]%s     - Delete trailers in all remaining commits\n", ui.Cyan, ui.NC)
+		fmt.Printf("  %s[Q]uit%s   - Stop and apply decisions made so far\n", ui.Red, ui.NC)
 		fmt.Println()
 
 		var choice string
@@ -314,23 +296,23 @@ func promptLoop(commitHash string, cfg *config.Config) string {
 
 		switch strings.ToUpper(choice) {
 		case "R":
-			cfg.CoauthorActions[hash] = "rewrite"
+			cfg.State.CoauthorActions[hash] = "rewrite"
 			cfg.Logger.Success("Will rewrite Co-authored-by trailer in commit " + commitHash[:12])
 			return ""
 		case "D":
-			cfg.CoauthorActions[hash] = "remove"
+			cfg.State.CoauthorActions[hash] = "remove"
 			cfg.Logger.Success("Will remove Co-authored-by trailer from commit " + commitHash[:12])
 			return ""
 		case "S":
-			cfg.CoauthorActions[hash] = "skip"
+			cfg.State.CoauthorActions[hash] = "skip"
 			cfg.Logger.Info("Commit " + commitHash[:12] + " will be left unchanged")
 			return ""
 		case "RA":
-			cfg.CoauthorActions[hash] = "rewrite"
+			cfg.State.CoauthorActions[hash] = "rewrite"
 			cfg.Logger.Info("Will rewrite Co-authored-by trailers in all remaining commits")
 			return "quit"
 		case "DA":
-			cfg.CoauthorActions[hash] = "remove"
+			cfg.State.CoauthorActions[hash] = "remove"
 			cfg.Logger.Info("Will remove Co-authored-by trailers from all remaining commits")
 			return "quit"
 		case "Q":

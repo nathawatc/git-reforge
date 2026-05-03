@@ -12,19 +12,21 @@ func TestNew(t *testing.T) {
 	if cfg.SignMode != "keep" {
 		t.Errorf("SignMode = %q want %q", cfg.SignMode, "keep")
 	}
-	if cfg.CommitOverrides == nil {
-		t.Error("CommitOverrides is nil")
+	if cfg.State == nil {
+		t.Fatal("State is nil")
 	}
-	if cfg.CommitMessages == nil {
-		t.Error("CommitMessages is nil")
+	if cfg.State.CommitOverrides == nil {
+		t.Error("State.CommitOverrides is nil")
 	}
-	if cfg.CoauthorActions == nil {
-		t.Error("CoauthorActions is nil")
+	if cfg.State.CommitMessages == nil {
+		t.Error("State.CommitMessages is nil")
+	}
+	if cfg.State.CoauthorActions == nil {
+		t.Error("State.CoauthorActions is nil")
 	}
 }
 
 func TestCommitOverride(t *testing.T) {
-	hash := plumbing.NewHash("abc123def456")
 	override := CommitOverride{
 		Name:  "Test User",
 		Email: "test@example.org",
@@ -40,7 +42,27 @@ func TestCommitOverride(t *testing.T) {
 	if override.Skip {
 		t.Error("Skip = true want false")
 	}
-	if hash.String() != "abc123def4560000000000000000000000000000" {
-		t.Errorf("Hash = %q", hash.String())
+}
+
+func TestInteractiveState(t *testing.T) {
+	state := &InteractiveState{
+		CommitOverrides: make(map[plumbing.Hash]CommitOverride),
+		CommitMessages:  make(map[plumbing.Hash]string),
+		CoauthorActions: make(map[plumbing.Hash]string),
+	}
+
+	hash := plumbing.NewHash("abc123def4560000000000000000000000000000")
+	state.CommitOverrides[hash] = CommitOverride{Name: "Test", Email: "test@example.org"}
+	state.CommitMessages[hash] = "New message"
+	state.CoauthorActions[hash] = "rewrite"
+
+	if state.CommitOverrides[hash].Name != "Test" {
+		t.Errorf("CommitOverrides[hash].Name = %q", state.CommitOverrides[hash].Name)
+	}
+	if state.CommitMessages[hash] != "New message" {
+		t.Errorf("CommitMessages[hash] = %q", state.CommitMessages[hash])
+	}
+	if state.CoauthorActions[hash] != "rewrite" {
+		t.Errorf("CoauthorActions[hash] = %q", state.CoauthorActions[hash])
 	}
 }

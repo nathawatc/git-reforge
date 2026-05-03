@@ -8,16 +8,6 @@ import (
 	"github-to-codeberg/pkg/config"
 )
 
-const (
-	Red    = "\033[1;31m"
-	Green  = "\033[1;32m"
-	Yellow = "\033[1;33m"
-	Blue   = "\033[0;34m"
-	Cyan   = "\033[0;36m"
-	Bold   = "\033[1m"
-	NC     = "\033[0m"
-)
-
 func DisplayConfig(cfg *config.Config) {
 	log := cfg.Logger
 	log.Header("Migration Configuration")
@@ -116,7 +106,7 @@ func ShowSummary(cfg *config.Config) {
 		case "interactive":
 			rewriteCount := 0
 			removeCount := 0
-			for _, action := range cfg.CoauthorActions {
+			for _, action := range cfg.State.CoauthorActions {
 				switch action {
 				case "rewrite":
 					rewriteCount++

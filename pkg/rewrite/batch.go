@@ -6,9 +6,9 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"strings"
 
 	"github-to-codeberg/pkg/config"
+	"github-to-codeberg/pkg/shell"
 )
 
 func RewriteCommitsBatch(cfg *config.Config) error {
@@ -37,16 +37,16 @@ OLD_NAMES_ARRAY=(
 
 for old_name in "${OLD_NAMES_ARRAY[@]}"; do
     if [ "$GIT_AUTHOR_NAME" = "$old_name" ]; then
-        export GIT_AUTHOR_NAME="` + EscapeShell(cfg.NewName) + `"
-        export GIT_AUTHOR_EMAIL="` + EscapeShell(cfg.NewEmail) + `"
+        export GIT_AUTHOR_NAME="` + shell.EscapeShell(cfg.NewName) + `"
+        export GIT_AUTHOR_EMAIL="` + shell.EscapeShell(cfg.NewEmail) + `"
         break
     fi
 done
 
 for old_name in "${OLD_NAMES_ARRAY[@]}"; do
     if [ "$GIT_COMMITTER_NAME" = "$old_name" ]; then
-        export GIT_COMMITTER_NAME="` + EscapeShell(cfg.NewName) + `"
-        export GIT_COMMITTER_EMAIL="` + EscapeShell(cfg.NewEmail) + `"
+        export GIT_COMMITTER_NAME="` + shell.EscapeShell(cfg.NewName) + `"
+        export GIT_COMMITTER_EMAIL="` + shell.EscapeShell(cfg.NewEmail) + `"
         break
     fi
 done
@@ -57,7 +57,7 @@ done
 	}
 
 	cmd := exec.Command("git", "filter-branch", "-f", "--env-filter", "source "+filterScript, "--tag-name-filter", "cat", "--", "--all")
-	cmd.Dir = cfg.TempDir + "/working"
+	cmd.Dir = cfg.WorkDir()
 	cmd.Env = append(os.Environ(),
 		"FILTER_NEW_NAME="+cfg.NewName,
 		"FILTER_NEW_EMAIL="+cfg.NewEmail,
@@ -74,18 +74,18 @@ func RewriteCommitsInteractive(cfg *config.Config) error {
 	log := cfg.Logger
 	log.Header("Rewriting Commit History (Interactive)")
 
-	if len(cfg.CommitOverrides) == 0 && len(cfg.CommitMessages) == 0 {
+	if len(cfg.State.CommitOverrides) == 0 && len(cfg.State.CommitMessages) == 0 {
 		log.Warning("No commits selected for modification")
 		return nil
 	}
 
-	total := len(cfg.CommitOverrides) + len(cfg.CommitMessages)
+	total := len(cfg.State.CommitOverrides) + len(cfg.State.CommitMessages)
 	log.Info(fmt.Sprintf("Applying %d commit modification(s)...", total))
-	if len(cfg.CommitOverrides) > 0 {
-		log.Info(fmt.Sprintf("  - %d author/email change(s)", len(cfg.CommitOverrides)))
+	if len(cfg.State.CommitOverrides) > 0 {
+		log.Info(fmt.Sprintf("  - %d author/email change(s)", len(cfg.State.CommitOverrides)))
 	}
-	if len(cfg.CommitMessages) > 0 {
-		log.Info(fmt.Sprintf("  - %d message change(s)", len(cfg.CommitMessages)))
+	if len(cfg.State.CommitMessages) > 0 {
+		log.Info(fmt.Sprintf("  - %d message change(s)", len(cfg.State.CommitMessages)))
 	}
 
 	msgFilterScript, err := generateMessageFilter(cfg)
@@ -95,7 +95,7 @@ func RewriteCommitsInteractive(cfg *config.Config) error {
 
 	args := []string{"git", "filter-branch", "-f"}
 
-	if len(cfg.CommitOverrides) > 0 {
+	if len(cfg.State.CommitOverrides) > 0 {
 		envFilterScript, err := generateInteractiveFilter(cfg)
 		if err != nil {
 			return err
@@ -103,14 +103,14 @@ func RewriteCommitsInteractive(cfg *config.Config) error {
 		args = append(args, "--env-filter", "source "+envFilterScript)
 	}
 
-	if len(cfg.CommitMessages) > 0 {
+	if len(cfg.State.CommitMessages) > 0 {
 		args = append(args, "--msg-filter", "source "+msgFilterScript)
 	}
 
 	args = append(args, "--tag-name-filter", "cat", "--", "--all")
 
 	cmd := exec.Command(args[0], args[1:]...)
-	cmd.Dir = cfg.TempDir + "/working"
+	cmd.Dir = cfg.WorkDir()
 	if err := cmd.Run(); err != nil {
 		return fmt.Errorf("filter-branch failed: %w", err)
 	}
@@ -123,15 +123,15 @@ func generateInteractiveFilter(cfg *config.Config) (string, error) {
 	scriptPath := filepath.Join(cfg.TempDir, "filter.sh")
 
 	script := "case \"$GIT_COMMIT\" in\n"
-	for hash, override := range cfg.CommitOverrides {
+	for hash, override := range cfg.State.CommitOverrides {
 		if override.Skip {
 			script += fmt.Sprintf("    %s)\n        ;;\n", hash.String())
 		} else {
 			script += fmt.Sprintf("    %s)\n", hash.String())
-			script += fmt.Sprintf("        export GIT_AUTHOR_NAME=\"%s\"\n", EscapeShell(override.Name))
-			script += fmt.Sprintf("        export GIT_AUTHOR_EMAIL=\"%s\"\n", EscapeShell(override.Email))
-			script += fmt.Sprintf("        export GIT_COMMITTER_NAME=\"%s\"\n", EscapeShell(override.Name))
-			script += fmt.Sprintf("        export GIT_COMMITTER_EMAIL=\"%s\"\n", EscapeShell(override.Email))
+			script += fmt.Sprintf("        export GIT_AUTHOR_NAME=\"%s\"\n", shell.EscapeShell(override.Name))
+			script += fmt.Sprintf("        export GIT_AUTHOR_EMAIL=\"%s\"\n", shell.EscapeShell(override.Email))
+			script += fmt.Sprintf("        export GIT_COMMITTER_NAME=\"%s\"\n", shell.EscapeShell(override.Name))
+			script += fmt.Sprintf("        export GIT_COMMITTER_EMAIL=\"%s\"\n", shell.EscapeShell(override.Email))
 			script += "        ;;\n"
 		}
 	}
@@ -151,9 +151,9 @@ func generateMessageFilter(cfg *config.Config) (string, error) {
 	script.WriteString("#!/usr/bin/env bash\n")
 	script.WriteString("original_msg=$(cat)\n")
 
-	if len(cfg.CommitMessages) > 0 {
+	if len(cfg.State.CommitMessages) > 0 {
 		script.WriteString("case \"$GIT_COMMIT\" in\n")
-		for hash, msg := range cfg.CommitMessages {
+		for hash, msg := range cfg.State.CommitMessages {
 			// Write message to sidecar file
 			msgFile := filepath.Join(cfg.TempDir, "msg_"+hash.String()+".txt")
 			if err := os.WriteFile(msgFile, []byte(msg), 0644); err != nil {
@@ -171,13 +171,4 @@ func generateMessageFilter(cfg *config.Config) (string, error) {
 	}
 
 	return scriptPath, nil
-}
-
-func EscapeShell(s string) string {
-	s = strings.ReplaceAll(s, "\\", "\\\\")
-	s = strings.ReplaceAll(s, "\"", "\\\"")
-	s = strings.ReplaceAll(s, "`", "\\`")
-	s = strings.ReplaceAll(s, "$", "\\$")
-	s = strings.ReplaceAll(s, "'", "'\\''")
-	return s
 }
