@@ -176,6 +176,7 @@ func generateMessageFilter(cfg *config.Config) (string, error) {
 func escapeShell(s string) string {
 	s = strings.ReplaceAll(s, "\\", "\\\\")
 	s = strings.ReplaceAll(s, "\"", "\\\"")
+	s = strings.ReplaceAll(s, "`", "\\`")
 	s = strings.ReplaceAll(s, "$", "\\$")
 	return s
 }

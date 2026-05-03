@@ -33,7 +33,9 @@ func handleNone(cfg *config.Config) error {
 	// Disable signing locally
 	cmd := exec.Command("git", "config", "gpg.sign", "false")
 	cmd.Dir = cfg.TempDir + "/working"
-	cmd.Run()
+	if err := cmd.Run(); err != nil {
+		return fmt.Errorf("git config gpg.sign failed: %w", err)
+	}
 
 	// Run filter-branch to recreate commits without signatures
 	cmd = exec.Command("git", "filter-branch", "-f", "--env-filter", `
@@ -47,7 +49,9 @@ export GIT_COMMITTER_DATE="$GIT_COMMITTER_DATE"
 	// Unset config
 	cmd = exec.Command("git", "config", "--unset", "gpg.sign")
 	cmd.Dir = cfg.TempDir + "/working"
-	cmd.Run()
+	if err := cmd.Run(); err != nil {
+		return fmt.Errorf("git config --unset failed: %w", err)
+	}
 
 	log.Success("Signatures removed")
 	return ResignTags(cfg)
@@ -179,12 +183,18 @@ func ResignTags(cfg *config.Config) error {
 func getTagMessage(tmpDir string, tagName string) (string, string, error) {
 	cmd := exec.Command("git", "tag", "-l", "--format=%(contents:subject)", tagName)
 	cmd.Dir = tmpDir + "/working"
-	output, _ := cmd.Output()
+	output, err := cmd.Output()
+	if err != nil {
+		return "", "", fmt.Errorf("git tag subject failed: %w", err)
+	}
 	subject := strings.TrimSpace(string(output))
 
 	cmd = exec.Command("git", "tag", "-l", "--format=%(contents:body)", tagName)
 	cmd.Dir = tmpDir + "/working"
-	output, _ = cmd.Output()
+	output, err = cmd.Output()
+	if err != nil {
+		return "", "", fmt.Errorf("git tag body failed: %w", err)
+	}
 	body := strings.TrimSpace(string(output))
 
 	msg := subject
@@ -195,39 +205,69 @@ func getTagMessage(tmpDir string, tagName string) (string, string, error) {
 	return subject, body, nil
 }
 
-func getTagCommit(tmpDir string, tagName string) string {
+func getTagCommit(tmpDir string, tagName string) (string, error) {
 	cmd := exec.Command("git", "rev-list", "-1", tagName)
 	cmd.Dir = tmpDir + "/working"
-	output, _ := cmd.Output()
-	return strings.TrimSpace(string(output))
+	output, err := cmd.Output()
+	if err != nil {
+		return "", fmt.Errorf("git rev-list failed: %w", err)
+	}
+	return strings.TrimSpace(string(output)), nil
 }
 
 func stripTag(cfg *config.Config, tagName string) error {
-	_, body, _ := getTagMessage(cfg.TempDir, tagName)
-	tagCommit := getTagCommit(cfg.TempDir, tagName)
+	_, body, err := getTagMessage(cfg.TempDir, tagName)
+	if err != nil {
+		return err
+	}
+	tagCommit, err := getTagCommit(cfg.TempDir, tagName)
+	if err != nil {
+		return err
+	}
 
 	msg := body
 	cmd := exec.Command("git", "tag", "-f", "-a", tagName, tagCommit, "-m", msg)
 	cmd.Dir = cfg.TempDir + "/working"
-	return cmd.Run()
+	if err := cmd.Run(); err != nil {
+		return fmt.Errorf("git tag strip failed: %w", err)
+	}
+	return nil
 }
 
 func resignTagGPG(cfg *config.Config, tagName string) error {
-	_, body, _ := getTagMessage(cfg.TempDir, tagName)
-	tagCommit := getTagCommit(cfg.TempDir, tagName)
+	_, body, err := getTagMessage(cfg.TempDir, tagName)
+	if err != nil {
+		return err
+	}
+	tagCommit, err := getTagCommit(cfg.TempDir, tagName)
+	if err != nil {
+		return err
+	}
 
 	cmd := exec.Command("git", "tag", "-f", "-s", tagName, "-u", cfg.GPGKey, tagCommit, "-m", body)
 	cmd.Dir = cfg.TempDir + "/working"
-	return cmd.Run()
+	if err := cmd.Run(); err != nil {
+		return fmt.Errorf("git tag resign GPG failed: %w", err)
+	}
+	return nil
 }
 
 func resignTagSSH(cfg *config.Config, tagName string) error {
-	_, body, _ := getTagMessage(cfg.TempDir, tagName)
-	tagCommit := getTagCommit(cfg.TempDir, tagName)
+	_, body, err := getTagMessage(cfg.TempDir, tagName)
+	if err != nil {
+		return err
+	}
+	tagCommit, err := getTagCommit(cfg.TempDir, tagName)
+	if err != nil {
+		return err
+	}
 
 	cmd := exec.Command("git", "tag", "-f", "-s", tagName, tagCommit, "-m", body)
 	cmd.Dir = cfg.TempDir + "/working"
-	return cmd.Run()
+	if err := cmd.Run(); err != nil {
+		return fmt.Errorf("git tag resign SSH failed: %w", err)
+	}
+	return nil
 }
 
 func splitLines(s string) []string {

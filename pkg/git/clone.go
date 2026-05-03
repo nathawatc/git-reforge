@@ -1,9 +1,12 @@
 package git
 
 import (
+	"errors"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
+	"strings"
 
 	"github.com/go-git/go-git/v5"
 	"github.com/go-git/go-git/v5/plumbing"
@@ -47,12 +50,16 @@ func Clone(cfg *config.Config) error {
 func convertBareToWorking(tmpDir string) error {
 	// Use git clone to convert bare to working
 	cmd := exec.Command("git", "clone", tmpDir+"/repo.git", tmpDir+"/working")
-	cmd.Run()
+	if err := cmd.Run(); err != nil {
+		return fmt.Errorf("git clone failed: %w", err)
+	}
 
 	// Fetch all refs
 	cmd = exec.Command("git", "fetch", "--all")
 	cmd.Dir = tmpDir + "/working"
-	cmd.Run()
+	if err := cmd.Run(); err != nil {
+		return fmt.Errorf("git fetch failed: %w", err)
+	}
 
 	return nil
 }
@@ -74,7 +81,10 @@ func ListCommitsByAuthor(tmpDir string, oldNames []string) ([]plumbing.Hash, err
 	for {
 		commit, err := iter.Next()
 		if err != nil {
-			break
+			if errors.Is(err, io.EOF) {
+				break
+			}
+			return nil, fmt.Errorf("commit iteration error: %w", err)
 		}
 
 		for _, oldName := range oldNames {
@@ -105,7 +115,10 @@ func ListCommitsWithCoauthor(tmpDir string, coauthorOldName string, coauthorOldE
 	for {
 		commit, err := iter.Next()
 		if err != nil {
-			break
+			if errors.Is(err, io.EOF) {
+				break
+			}
+			return nil, fmt.Errorf("commit iteration error: %w", err)
 		}
 
 		// Search for Co-authored-by trailers in message
@@ -137,7 +150,7 @@ func containsCoauthorWithEmail(msg string, name string, email string) bool {
 func containsPattern(msg string, pattern string) bool {
 	lines := splitLines(msg)
 	for _, line := range lines {
-		if len(line) >= len(pattern) && line[:len(pattern)] == pattern {
+		if strings.HasPrefix(line, pattern) {
 			return true
 		}
 	}
@@ -210,7 +223,10 @@ func ListAnnotatedTags(tmpDir string) ([]string, error) {
 		// Check if annotated
 		cmd = exec.Command("git", "cat-file", "-t", "refs/tags/"+tag)
 		cmd.Dir = tmpDir + "/working"
-		out, _ := cmd.Output()
+		out, err := cmd.Output()
+		if err != nil {
+			continue
+		}
 		if string(out) == "tag\n" {
 			tags = append(tags, tag)
 		}
@@ -237,7 +253,9 @@ func Push(tmpDir string, destURL string) error {
 	// Push tags with explicit refspec
 	cmd = exec.Command("git", "push", "--force", "origin", "refs/tags/*:refs/tags/*")
 	cmd.Dir = tmpDir + "/working"
-	cmd.Run()
+	if err := cmd.Run(); err != nil {
+		return fmt.Errorf("failed to push tags: %w", err)
+	}
 
 	return nil
 }
