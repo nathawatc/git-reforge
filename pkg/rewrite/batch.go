@@ -166,7 +166,7 @@ func generateMessageFilter(cfg *config.Config) (string, error) {
 		script.WriteString("printf '%s' \"$original_msg\"\n")
 	}
 
-	if err := os.WriteFile(scriptPath, []byte(script.String()), 0755); err != nil {
+	if err := os.WriteFile(scriptPath, script.Bytes(), 0755); err != nil {
 		return "", fmt.Errorf("failed to write message filter script: %w", err)
 	}
 

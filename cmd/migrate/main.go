@@ -26,77 +26,77 @@ func main() {
 		Name:  "migrate",
 		Usage: "GitHub to Codeberg migration script",
 		Flags: []cli.Flag{
-			{
+			&cli.StringFlag{
 				Name:    "source",
 				Aliases: []string{"s"},
 				Usage:   "GitHub repository URL",
 			},
-			{
+			&cli.StringFlag{
 				Name:    "dest",
 				Aliases: []string{"d"},
 				Usage:   "Codeberg repository URL",
 			},
-			{
+			&cli.StringFlag{
 				Name:    "new-name",
 				Aliases: []string{"n"},
 				Usage:   "New author name",
 			},
-			{
+			&cli.StringFlag{
 				Name:    "new-email",
 				Aliases: []string{"e"},
 				Usage:   "New author email",
 			},
-			{
+			&cli.StringFlag{
 				Name:    "old-name",
 				Aliases: []string{"o"},
 				Usage:   "Old author name(s) to replace",
 			},
-			{
+			&cli.BoolFlag{
 				Name:    "interactive",
 				Aliases: []string{"i"},
 				Usage:   "Enable interactive mode for per-commit editing",
 			},
-			{
+			&cli.StringFlag{
 				Name:  "sign-mode",
 				Usage: "Signing mode: keep|gpg|ssh|none (default: keep)",
 			},
-			{
+			&cli.StringFlag{
 				Name:  "gpg-key",
 				Usage: "GPG key ID for re-signing",
 			},
-			{
+			&cli.StringFlag{
 				Name:  "ssh-key",
 				Usage: "SSH key path for re-signing",
 			},
-			{
+			&cli.BoolFlag{
 				Name:  "nosign",
 				Usage: "Shorthand for --sign-mode=none",
 			},
-			{
+			&cli.StringFlag{
 				Name:  "coauthor-mode",
 				Usage: "Co-authored-by trailer mode: rewrite|remove|interactive",
 			},
-			{
+			&cli.StringFlag{
 				Name:  "coauthor-old",
 				Usage: "Name to match in Co-authored-by trailers",
 			},
-			{
+			&cli.StringFlag{
 				Name:  "coauthor-old-email",
 				Usage: "Email to match in Co-authored-by trailers",
 			},
-			{
+			&cli.StringFlag{
 				Name:  "coauthor-new-name",
 				Usage: "Replacement name for Co-authored-by",
 			},
-			{
+			&cli.StringFlag{
 				Name:  "coauthor-new-email",
 				Usage: "Replacement email for Co-authored-by",
 			},
-			{
+			&cli.StringFlag{
 				Name:  "save-dir",
 				Usage: "Save the rewritten repository to <path>",
 			},
-			{
+			&cli.BoolFlag{
 				Name:  "no-push",
 				Usage: "Rewrite history locally but do not push",
 			},

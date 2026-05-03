@@ -52,7 +52,7 @@ func (l *Logger) Error(msg string) {
 func (l *Logger) Header(msg string) {
 	fmt.Println()
 	fmt.Println(strings.Repeat("═", 64))
-	fmt.Printf("%s%s%s %s%s%s\n", Bold, Cyan, "  ", msg, NC)
+	fmt.Printf("%s%s%s %s%s\n", Bold, Cyan, "  ", msg, NC)
 	fmt.Println(strings.Repeat("═", 64))
 	fmt.Println()
 }
