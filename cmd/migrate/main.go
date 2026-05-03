@@ -183,7 +183,9 @@ func main() {
 			ui.ShowSummary(cfg)
 
 			if cfg.TempDir != "" {
-				os.RemoveAll(cfg.TempDir)
+				if err := os.RemoveAll(cfg.TempDir); err != nil {
+					log.Warning("Failed to clean up temp directory: " + cfg.TempDir)
+				}
 			}
 
 			return nil

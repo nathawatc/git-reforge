@@ -39,7 +39,10 @@ func handleNone(cfg *config.Config) error {
 		return fmt.Errorf("git config gpg.sign failed: %w", err)
 	}
 
-	// Run filter-branch to recreate commits without signatures
+	// Run filter-branch to recreate commits without signatures.
+	// The env-filter touches GIT_COMMITTER_DATE (even to its original value)
+	// to force filter-branch to process every commit; gpg.sign=false ensures
+	// the recreated objects are not signed.
 	cmd = exec.Command("git", "filter-branch", "-f", "--env-filter", `
 export GIT_COMMITTER_DATE="$GIT_COMMITTER_DATE"
 `, "--tag-name-filter", "cat", "--", "--all")
