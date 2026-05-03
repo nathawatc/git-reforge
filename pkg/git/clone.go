@@ -12,6 +12,7 @@ import (
 	"github.com/go-git/go-git/v5/plumbing"
 
 	"github-to-codeberg/pkg/config"
+	"github-to-codeberg/pkg/util"
 )
 
 func Clone(cfg *config.Config) error {
@@ -148,28 +149,13 @@ func containsCoauthorWithEmail(msg string, name string, email string) bool {
 }
 
 func containsPattern(msg string, pattern string) bool {
-	lines := splitLines(msg)
+	lines := util.SplitLines(msg)
 	for _, line := range lines {
 		if strings.HasPrefix(line, pattern) {
 			return true
 		}
 	}
 	return false
-}
-
-func splitLines(s string) []string {
-	var lines []string
-	start := 0
-	for i := 0; i < len(s); i++ {
-		if s[i] == '\n' {
-			lines = append(lines, s[start:i])
-			start = i + 1
-		}
-	}
-	if start < len(s) {
-		lines = append(lines, s[start:])
-	}
-	return lines
 }
 
 // GetCommitInfo returns author info for a commit
@@ -189,19 +175,10 @@ func GetCommitInfo(tmpDir string, hash plumbing.Hash) (authorName, authorEmail, 
 	authorName = commit.Author.Name
 	authorEmail = commit.Author.Email
 	authorDate = commit.Author.When.Format("2006-01-02 15:04:05 -0700")
-	subject = splitFirstLine(commit.Message)
+	subject = util.SplitFirstLine(commit.Message)
 	body = commit.Message
 
 	return
-}
-
-func splitFirstLine(s string) string {
-	for i := 0; i < len(s); i++ {
-		if s[i] == '\n' {
-			return s[:i]
-		}
-	}
-	return s
 }
 
 // ListAnnotatedTags returns all annotated tag names
@@ -215,7 +192,7 @@ func ListAnnotatedTags(tmpDir string) ([]string, error) {
 		return tags, nil
 	}
 
-	lines := splitLines(string(output))
+	lines := util.SplitLines(string(output))
 	for _, tag := range lines {
 		if tag == "" {
 			continue

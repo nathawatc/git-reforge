@@ -256,14 +256,13 @@ func checkDependencies(cfg *config.Config) {
 	log := cfg.Logger
 	log.Info("Checking dependencies...")
 
-	cmd := exec.Command("git")
-	if err := cmd.Run(); err != nil {
+	if _, err := exec.LookPath("git"); err != nil {
 		log.Error("git is not installed")
 		os.Exit(1)
 	}
 
 	if cfg.SignMode == "gpg" {
-		cmd = exec.Command("gpg", "--list-secret-keys", cfg.GPGKey)
+		cmd := exec.Command("gpg", "--list-secret-keys", cfg.GPGKey)
 		if err := cmd.Run(); err != nil {
 			log.Error("GPG key not found: " + cfg.GPGKey)
 			os.Exit(1)

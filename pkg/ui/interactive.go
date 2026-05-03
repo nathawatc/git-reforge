@@ -10,6 +10,7 @@ import (
 	"github.com/go-git/go-git/v5/plumbing"
 
 	"github-to-codeberg/pkg/config"
+	"github-to-codeberg/pkg/util"
 )
 
 func InteractiveEdit(cfg *config.Config) {
@@ -86,7 +87,7 @@ func getCommitsByAuthor(tmpDir string, authorName string) []string {
 	}
 
 	var commits []string
-	lines := splitLines(string(output))
+	lines := util.SplitLines(string(output))
 	for _, line := range lines {
 		if line != "" {
 			commits = append(commits, line)
@@ -225,19 +226,4 @@ func uniqueList(list []string) []string {
 		}
 	}
 	return result
-}
-
-func splitLines(s string) []string {
-	var lines []string
-	start := 0
-	for i := 0; i < len(s); i++ {
-		if s[i] == '\n' {
-			lines = append(lines, s[start:i])
-			start = i + 1
-		}
-	}
-	if start < len(s) {
-		lines = append(lines, s[start:])
-	}
-	return lines
 }

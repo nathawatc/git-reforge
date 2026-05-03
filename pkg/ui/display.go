@@ -82,7 +82,7 @@ func DisplayConfig(cfg *config.Config) {
 	fmt.Print("Proceed with migration? [y/N] ")
 	var reply string
 	fmt.Scanln(&reply)
-	if !strings.HasPrefix(strings.ToUpper(reply), "Y") {
+	if !strings.EqualFold(reply, "Y") {
 		log.Info("Migration cancelled")
 		os.Exit(0)
 	}

@@ -10,6 +10,7 @@ import (
 	"github.com/go-git/go-git/v5/plumbing"
 
 	"github-to-codeberg/pkg/config"
+	"github-to-codeberg/pkg/util"
 )
 
 const (
@@ -173,7 +174,7 @@ func InteractiveCoauthorEdit(cfg *config.Config) {
 	}
 
 	var matchingCommits []string
-	lines := splitLines(string(output))
+	lines := util.SplitLines(string(output))
 	for _, commitHash := range lines {
 		if commitHash == "" {
 			continue
@@ -267,7 +268,7 @@ func matchesCoauthor(body string, name string, email string) bool {
 
 func extractMatchingLines(body string, name string, email string) []string {
 	var matches []string
-	lines := splitLines(body)
+	lines := util.SplitLines(body)
 	for _, line := range lines {
 		if email != "" {
 			if strings.Contains(line, "Co-authored-by: "+name+" <"+email+">") {
@@ -326,19 +327,4 @@ func promptLoop(commitHash string, cfg *config.Config) string {
 			cfg.Logger.Warning("Invalid choice. Please select R, D, S, RA, DA, or Q.")
 		}
 	}
-}
-
-func splitLines(s string) []string {
-	var lines []string
-	start := 0
-	for i := 0; i < len(s); i++ {
-		if s[i] == '\n' {
-			lines = append(lines, s[start:i])
-			start = i + 1
-		}
-	}
-	if start < len(s) {
-		lines = append(lines, s[start:])
-	}
-	return lines
 }
