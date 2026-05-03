@@ -21,6 +21,8 @@ func HandleSigning(cfg *config.Config) error {
 		return handleGPG(cfg)
 	case "ssh":
 		return handleSSH(cfg)
+	default:
+		return fmt.Errorf("unknown sign mode: %q (valid: keep|gpg|ssh|none)", cfg.SignMode)
 	}
 
 	return nil
