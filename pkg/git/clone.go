@@ -247,9 +247,17 @@ func copyDirRecursive(src, dst string) error {
 		if err != nil {
 			return err
 		}
+		// Skip symlinks to prevent traversal outside src tree
+		if info.Mode()&os.ModeSymlink != 0 {
+			return nil
+		}
 		rel, err := filepath.Rel(src, path)
 		if err != nil {
 			return err
+		}
+		// Prevent writing outside dst tree
+		if strings.HasPrefix(rel, "..") {
+			return nil
 		}
 		dstPath := filepath.Join(dst, rel)
 		if info.IsDir() {

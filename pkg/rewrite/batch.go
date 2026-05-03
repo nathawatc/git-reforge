@@ -29,13 +29,11 @@ func RewriteCommitsBatch(cfg *config.Config) error {
 	// Build the filter script
 	var script strings.Builder
 	script.WriteString(`#!/usr/bin/env bash
-OLD_NAMES_ARRAY=(
 `)
 	for _, name := range cfg.OldNames {
-		fmt.Fprintf(&script, "    %q\n", name)
+		fmt.Fprintf(&script, "echo %q\n", name)
 	}
-	script.WriteString(`)
-for old_name in "${OLD_NAMES_ARRAY[@]}"; do
+	script.WriteString(` | while IFS= read -r old_name; do
     if [ "$GIT_AUTHOR_NAME" = "$old_name" ]; then
         export GIT_AUTHOR_NAME="` + shell.EscapeShell(cfg.NewName) + `"
         export GIT_AUTHOR_EMAIL="` + shell.EscapeShell(cfg.NewEmail) + `"
@@ -43,7 +41,7 @@ for old_name in "${OLD_NAMES_ARRAY[@]}"; do
     fi
 done
 
-for old_name in "${OLD_NAMES_ARRAY[@]}"; do
+echo "` + shell.EscapeShell(strings.Join(cfg.OldNames, "\n")) + `" | while IFS= read -r old_name; do
     if [ "$GIT_COMMITTER_NAME" = "$old_name" ]; then
         export GIT_COMMITTER_NAME="` + shell.EscapeShell(cfg.NewName) + `"
         export GIT_COMMITTER_EMAIL="` + shell.EscapeShell(cfg.NewEmail) + `"

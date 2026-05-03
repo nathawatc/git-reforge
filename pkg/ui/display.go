@@ -74,7 +74,7 @@ func DisplayConfig(cfg *config.Config) {
 	if _, err := fmt.Scanln(&reply); err != nil {
 		reply = ""
 	}
-	if !strings.EqualFold(reply, "Y") {
+	if !strings.EqualFold(strings.TrimSpace(reply), "Y") {
 		log.Info("Migration cancelled")
 		os.Exit(0)
 	}

@@ -70,6 +70,10 @@ func RewriteInteractive(cfg *config.Config) error {
 }
 
 func buildCoauthorMsgFilter(cfg *config.Config, outputPath string, modeType string) error {
+	if cfg.CoauthorOldName == "" {
+		return fmt.Errorf("coauthor-old-name is required for coauthor operations")
+	}
+
 	var script strings.Builder
 
 	script.WriteString("#!/usr/bin/env bash\n")

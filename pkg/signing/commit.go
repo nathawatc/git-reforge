@@ -100,7 +100,7 @@ func handleSSH(cfg *config.Config) error {
 		return fmt.Errorf("git config gpg.format failed: %w", err)
 	}
 
-	cmd = exec.Command("git", "config", "user.signingkey", shell.EscapeShell(cfg.SSHKey))
+	cmd = exec.Command("git", "config", "user.signingkey", cfg.SSHKey)
 	cmd.Dir = cfg.WorkDir()
 	if err := cmd.Run(); err != nil {
 		return fmt.Errorf("git config user.signingkey failed: %w", err)
@@ -112,16 +112,16 @@ func handleSSH(cfg *config.Config) error {
 		return fmt.Errorf("filter-branch failed: %w", err)
 	}
 
-	cmd = exec.Command("git", "config", "--unset", "user.signingkey")
-	cmd.Dir = cfg.WorkDir()
-	if err := cmd.Run(); err != nil {
-		return fmt.Errorf("git config --unset user.signingkey failed: %w", err)
-	}
-
 	cmd = exec.Command("git", "config", "--unset", "gpg.format")
 	cmd.Dir = cfg.WorkDir()
 	if err := cmd.Run(); err != nil {
 		return fmt.Errorf("git config --unset gpg.format failed: %w", err)
+	}
+
+	cmd = exec.Command("git", "config", "--unset", "user.signingkey")
+	cmd.Dir = cfg.WorkDir()
+	if err := cmd.Run(); err != nil {
+		return fmt.Errorf("git config --unset user.signingkey failed: %w", err)
 	}
 
 	log.Success("Commits re-signed with SSH")
