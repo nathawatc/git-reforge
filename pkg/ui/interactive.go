@@ -38,31 +38,48 @@ func InteractiveEdit(cfg *config.Config) {
 	current := 0
 	for _, commitHash := range commits {
 		current++
-		authorName, authorEmail, authorDate, subject, _ := getCommitDetails(cfg.TempDir, commitHash)
-
-		fmt.Printf("%s────────────────────────────────────────────────────────────────%s\n", Bold, NC)
-		fmt.Printf("%sCommit %d of %d%s\n", Bold, current, len(commits), NC)
-		fmt.Printf("%s────────────────────────────────────────────────────────────────%s\n", Bold, NC)
-		fmt.Printf("  %sHash:%s       %s\n", Cyan, NC, commitHash[:12])
-		fmt.Printf("  %sAuthor:%s     %s <%s>\n", Cyan, NC, authorName, authorEmail)
-		fmt.Printf("  %sDate:%s       %s\n", Cyan, NC, authorDate)
-		fmt.Printf("  %sMessage:%s    %s\n", Cyan, NC, subject)
-		fmt.Println()
-
 		hash := plumbing.NewHash(commitHash)
-		msgStatus := "(unchanged)"
-		if _, ok := cfg.State.CommitMessages[hash]; ok {
-			msgStatus = fmt.Sprintf("%s(customized)%s", Yellow, NC)
-		}
-		fmt.Printf("  %sDefault changes:%s\n", Bold, NC)
-		fmt.Printf("    Name:    %s → %s\n", authorName, cfg.NewName)
-		fmt.Printf("    Email:   %s → %s\n", authorEmail, cfg.NewEmail)
-		fmt.Printf("    Message: %s\n", msgStatus)
-		fmt.Println()
+		remainingCommits := commits[current-1:]
+		for {
+			override, hasOverride := cfg.State.CommitOverrides[hash]
+			authorName, authorEmail, authorDate, subject, _ := getCommitDetails(cfg.TempDir, commitHash)
 
-		choice := promptCommitChoice(commitHash, cfg)
-		if choice == "quit" {
-			return
+			fmt.Printf("%s────────────────────────────────────────────────────────────────%s\n", Bold, NC)
+			fmt.Printf("%sCommit %d of %d%s\n", Bold, current, len(commits), NC)
+			fmt.Printf("%s────────────────────────────────────────────────────────────────%s\n", Bold, NC)
+			fmt.Printf("  %sHash:%s       %s\n", Cyan, NC, commitHash[:12])
+			fmt.Printf("  %sAuthor:%s     %s <%s>\n", Cyan, NC, authorName, authorEmail)
+			fmt.Printf("  %sDate:%s       %s\n", Cyan, NC, authorDate)
+			fmt.Printf("  %sMessage:%s    %s\n", Cyan, NC, subject)
+			fmt.Println()
+
+			if hasOverride && !override.Skip {
+				fmt.Printf("  %sChanges:%s\n", Bold, NC)
+				fmt.Printf("    Name:    %s\n", override.Name)
+				fmt.Printf("    Email:   %s\n", override.Email)
+			} else if hasOverride && override.Skip {
+				fmt.Printf("  %sSkipped%s - No changes applied\n", Bold, NC)
+			} else {
+				fmt.Printf("  %sDefault changes:%s\n", Bold, NC)
+				fmt.Printf("    Name:    %s → %s\n", authorName, cfg.NewName)
+				fmt.Printf("    Email:   %s → %s\n", authorEmail, cfg.NewEmail)
+			}
+
+			msgStatus := "(unchanged)"
+			if _, ok := cfg.State.CommitMessages[hash]; ok {
+				msgStatus = fmt.Sprintf("%s(customized)%s", Yellow, NC)
+			}
+			fmt.Printf("    Message: %s\n", msgStatus)
+			fmt.Println()
+
+			choice := promptCommitChoice(commitHash, remainingCommits, hasOverride, cfg)
+			if choice == "quit" {
+				return
+			}
+			if choice == "next" {
+				break
+			}
+			// "" means E or M was selected, loop re-reads state and re-prompts
 		}
 		fmt.Println()
 	}
@@ -123,14 +140,18 @@ func getCommitDetails(tmpDir string, hash string) (authorName, authorEmail, auth
 	return
 }
 
-func promptCommitChoice(commitHash string, cfg *config.Config) string {
+func promptCommitChoice(commitHash string, remainingCommits []string, hasOverride bool, cfg *config.Config) string {
 	hash := plumbing.NewHash(commitHash)
 	reader := bufio.NewReader(os.Stdin)
 
 	for {
+		if hasOverride {
+			fmt.Printf("  %s[A]pply%s - Apply changes\n", Green, NC)
+		} else {
+			fmt.Printf("  %s[A]pply%s - Apply default changes\n", Green, NC)
+		}
 		fmt.Printf("  %s[E]dit%s - Customize name/email for this commit\n", Yellow, NC)
 		fmt.Printf("  %s[M]essage%s - Edit commit message\n", Yellow, NC)
-		fmt.Printf("  %s[A]pply%s - Apply default changes\n", Green, NC)
 		fmt.Printf("  %s[S]kip%s - Keep original (no changes)\n", Blue, NC)
 		fmt.Printf("  %s[D]efault all%s - Apply default to all remaining\n", Cyan, NC)
 		fmt.Printf("  %s[Q]uit%s - Stop and apply changes made so far\n", Red, NC)
@@ -181,21 +202,28 @@ func promptCommitChoice(commitHash string, cfg *config.Config) string {
 			fmt.Println()
 			return ""
 		case "A":
-			cfg.State.CommitOverrides[hash] = config.CommitOverride{
-				Name:  cfg.NewName,
-				Email: cfg.NewEmail,
+			if !hasOverride {
+				cfg.State.CommitOverrides[hash] = config.CommitOverride{
+					Name:  cfg.NewName,
+					Email: cfg.NewEmail,
+				}
 			}
 			cfg.Logger.Success("Changes will be applied to commit " + commitHash[:12])
-			return ""
+			return "next"
 		case "S":
 			cfg.State.CommitOverrides[hash] = config.CommitOverride{Skip: true}
 			cfg.Logger.Info("Commit " + commitHash[:12] + " will be kept unchanged")
-			return ""
+			return "next"
 		case "D":
 			cfg.Logger.Info("Applying default changes to all remaining commits...")
-			cfg.State.CommitOverrides[hash] = config.CommitOverride{
-				Name:  cfg.NewName,
-				Email: cfg.NewEmail,
+			clone := make([]string, len(remainingCommits))
+			copy(clone, remainingCommits)
+			for _, remainingHash := range clone {
+				h := plumbing.NewHash(remainingHash)
+				cfg.State.CommitOverrides[h] = config.CommitOverride{
+					Name:  cfg.NewName,
+					Email: cfg.NewEmail,
+				}
 			}
 			return "quit"
 		case "Q":
