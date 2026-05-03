@@ -1,13 +1,14 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"os/exec"
 	"slices"
 	"strings"
 
-	"github.com/urfave/cli/v2"
+	"github.com/urfave/cli/v3"
 
 	"github-to-codeberg/pkg/coauthor"
 	"github-to-codeberg/pkg/config"
@@ -23,7 +24,7 @@ func main() {
 	cfg := config.New()
 	cfg.Logger = log
 
-	app := &cli.App{
+	cmd := &cli.Command{
 		Name:  "migrate",
 		Usage: "GitHub to Codeberg migration script",
 		Flags: []cli.Flag{
@@ -102,7 +103,7 @@ func main() {
 				Usage: "Rewrite history locally but do not push",
 			},
 		},
-		Action: func(c *cli.Context) error {
+		Action: func(ctx context.Context, c *cli.Command) error {
 			cfg.SourceURL = c.String("source")
 			cfg.DestURL = c.String("dest")
 			cfg.NewName = c.String("new-name")
@@ -193,7 +194,7 @@ func main() {
 		},
 	}
 
-	if err := app.Run(os.Args); err != nil {
+	if err := cmd.Run(context.Background(), os.Args); err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}
