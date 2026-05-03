@@ -37,16 +37,16 @@ OLD_NAMES_ARRAY=(
 
 for old_name in "${OLD_NAMES_ARRAY[@]}"; do
     if [ "$GIT_AUTHOR_NAME" = "$old_name" ]; then
-        export GIT_AUTHOR_NAME="` + escapeShell(cfg.NewName) + `"
-        export GIT_AUTHOR_EMAIL="` + escapeShell(cfg.NewEmail) + `"
+        export GIT_AUTHOR_NAME="` + EscapeShell(cfg.NewName) + `"
+        export GIT_AUTHOR_EMAIL="` + EscapeShell(cfg.NewEmail) + `"
         break
     fi
 done
 
 for old_name in "${OLD_NAMES_ARRAY[@]}"; do
     if [ "$GIT_COMMITTER_NAME" = "$old_name" ]; then
-        export GIT_COMMITTER_NAME="` + escapeShell(cfg.NewName) + `"
-        export GIT_COMMITTER_EMAIL="` + escapeShell(cfg.NewEmail) + `"
+        export GIT_COMMITTER_NAME="` + EscapeShell(cfg.NewName) + `"
+        export GIT_COMMITTER_EMAIL="` + EscapeShell(cfg.NewEmail) + `"
         break
     fi
 done
@@ -128,10 +128,10 @@ func generateInteractiveFilter(cfg *config.Config) (string, error) {
 			script += fmt.Sprintf("    %s)\n        ;;\n", hash.String())
 		} else {
 			script += fmt.Sprintf("    %s)\n", hash.String())
-			script += fmt.Sprintf("        export GIT_AUTHOR_NAME=\"%s\"\n", escapeShell(override.Name))
-			script += fmt.Sprintf("        export GIT_AUTHOR_EMAIL=\"%s\"\n", escapeShell(override.Email))
-			script += fmt.Sprintf("        export GIT_COMMITTER_NAME=\"%s\"\n", escapeShell(override.Name))
-			script += fmt.Sprintf("        export GIT_COMMITTER_EMAIL=\"%s\"\n", escapeShell(override.Email))
+			script += fmt.Sprintf("        export GIT_AUTHOR_NAME=\"%s\"\n", EscapeShell(override.Name))
+			script += fmt.Sprintf("        export GIT_AUTHOR_EMAIL=\"%s\"\n", EscapeShell(override.Email))
+			script += fmt.Sprintf("        export GIT_COMMITTER_NAME=\"%s\"\n", EscapeShell(override.Name))
+			script += fmt.Sprintf("        export GIT_COMMITTER_EMAIL=\"%s\"\n", EscapeShell(override.Email))
 			script += "        ;;\n"
 		}
 	}
@@ -173,10 +173,11 @@ func generateMessageFilter(cfg *config.Config) (string, error) {
 	return scriptPath, nil
 }
 
-func escapeShell(s string) string {
+func EscapeShell(s string) string {
 	s = strings.ReplaceAll(s, "\\", "\\\\")
 	s = strings.ReplaceAll(s, "\"", "\\\"")
 	s = strings.ReplaceAll(s, "`", "\\`")
 	s = strings.ReplaceAll(s, "$", "\\$")
+	s = strings.ReplaceAll(s, "'", "'\\''")
 	return s
 }

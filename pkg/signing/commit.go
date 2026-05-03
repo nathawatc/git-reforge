@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github-to-codeberg/pkg/config"
+	"github-to-codeberg/pkg/rewrite"
 	"github-to-codeberg/pkg/util"
 )
 
@@ -69,7 +70,7 @@ func handleGPG(cfg *config.Config) error {
 		return fmt.Errorf("git config user.signingkey failed: %w", err)
 	}
 
-	commitFilter := fmt.Sprintf(`git commit-tree -S"%s" "$@"`, cfg.GPGKey)
+	commitFilter := fmt.Sprintf(`git commit-tree -S"%s" "$@"`, rewrite.EscapeShell(cfg.GPGKey))
 	cmd = exec.Command("git", "filter-branch", "-f", "--commit-filter", commitFilter, "--tag-name-filter", "cat", "--", "--all")
 	cmd.Dir = cfg.TempDir + "/working"
 	if err := cmd.Run(); err != nil {
@@ -97,7 +98,7 @@ func handleSSH(cfg *config.Config) error {
 		return fmt.Errorf("git config gpg.format failed: %w", err)
 	}
 
-	cmd = exec.Command("git", "config", "user.signingkey", cfg.SSHKey)
+	cmd = exec.Command("git", "config", "user.signingkey", rewrite.EscapeShell(cfg.SSHKey))
 	cmd.Dir = cfg.TempDir + "/working"
 	if err := cmd.Run(); err != nil {
 		return fmt.Errorf("git config user.signingkey failed: %w", err)

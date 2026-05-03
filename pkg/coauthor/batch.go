@@ -228,30 +228,41 @@ func InteractiveCoauthorEdit(cfg *config.Config) {
 func getCommitBody(tmpDir string, hash string) string {
 	cmd := exec.Command("git", "log", "-1", "--format=%B", hash)
 	cmd.Dir = tmpDir + "/working"
-	output, _ := cmd.Output()
+	output, err := cmd.Output()
+	if err != nil {
+		return ""
+	}
 	return string(output)
 }
 
 func getCommitDetails(tmpDir string, hash string) (authorName, authorDate, subject, body string) {
 	cmd := exec.Command("git", "log", "-1", "--format=%an", hash)
 	cmd.Dir = tmpDir + "/working"
-	output, _ := cmd.Output()
-	authorName = strings.TrimSpace(string(output))
+	output, err := cmd.Output()
+	if err == nil {
+		authorName = strings.TrimSpace(string(output))
+	}
 
 	cmd = exec.Command("git", "log", "-1", "--format=%ai", hash)
 	cmd.Dir = tmpDir + "/working"
-	output, _ = cmd.Output()
-	authorDate = strings.TrimSpace(string(output))
+	output, err = cmd.Output()
+	if err == nil {
+		authorDate = strings.TrimSpace(string(output))
+	}
 
 	cmd = exec.Command("git", "log", "-1", "--format=%s", hash)
 	cmd.Dir = tmpDir + "/working"
-	output, _ = cmd.Output()
-	subject = strings.TrimSpace(string(output))
+	output, err = cmd.Output()
+	if err == nil {
+		subject = strings.TrimSpace(string(output))
+	}
 
 	cmd = exec.Command("git", "log", "-1", "--format=%B", hash)
 	cmd.Dir = tmpDir + "/working"
-	output, _ = cmd.Output()
-	body = string(output)
+	output, err = cmd.Output()
+	if err == nil {
+		body = string(output)
+	}
 
 	return
 }

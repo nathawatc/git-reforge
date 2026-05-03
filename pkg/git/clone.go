@@ -189,7 +189,7 @@ func ListAnnotatedTags(tmpDir string) ([]string, error) {
 	cmd.Dir = tmpDir + "/working"
 	output, err := cmd.Output()
 	if err != nil {
-		return tags, nil
+		return nil, fmt.Errorf("git tag failed: %w", err)
 	}
 
 	lines := util.SplitLines(string(output))
