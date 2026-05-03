@@ -6,6 +6,7 @@ import (
 	"io"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"slices"
 	"strings"
 
@@ -238,9 +239,58 @@ func Push(tmpDir string, destURL string) error {
 
 // Save copies the working repository to saveDir
 func Save(tmpDir string, saveDir string) error {
-	cmd := exec.Command("cp", "-r", tmpDir+"/working", saveDir)
-	if err := cmd.Run(); err != nil {
-		return fmt.Errorf("failed to save repository: %w", err)
+	return copyDirRecursive(tmpDir+"/working", saveDir)
+}
+
+func copyDirRecursive(src, dst string) error {
+	return filepath.Walk(src, func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			return err
+		}
+		rel, err := filepath.Rel(src, path)
+		if err != nil {
+			return err
+		}
+		dstPath := filepath.Join(dst, rel)
+		if info.IsDir() {
+			if err := os.MkdirAll(dstPath, 0755); err != nil {
+				return err
+			}
+		} else {
+			if err := os.MkdirAll(filepath.Dir(dstPath), 0755); err != nil {
+				return err
+			}
+			if err := copyFile(path, dstPath); err != nil {
+				return err
+			}
+		}
+		return nil
+	})
+}
+
+func copyFile(src, dst string) (err error) {
+	sf, err := os.Open(src)
+	if err != nil {
+		return err
 	}
-	return nil
+	defer func() {
+		if closeErr := sf.Close(); closeErr != nil {
+			err = closeErr
+		}
+	}()
+
+	df, err := os.Create(dst)
+	if err != nil {
+		return err
+	}
+	defer func() {
+		if closeErr := df.Close(); closeErr != nil {
+			err = closeErr
+		}
+	}()
+
+	if _, err := io.Copy(df, sf); err != nil {
+		return err
+	}
+	return df.Sync()
 }
