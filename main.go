@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"slices"
 	"strings"
 
 	"github.com/urfave/cli/v2"
@@ -215,10 +216,8 @@ func validateArgs(cfg *config.Config) error {
 		return fmt.Errorf("at least one old author name is required (-o, --old-name)")
 	}
 
-	for _, name := range cfg.OldNames {
-		if name == "" {
-			return fmt.Errorf("empty string is not a valid old author name (-o, --old-name)")
-		}
+	if slices.Contains(cfg.OldNames, "") {
+		return fmt.Errorf("empty string is not a valid old author name (-o, --old-name)")
 	}
 
 	if cfg.SignMode == "gpg" && cfg.GPGKey == "" {
@@ -282,9 +281,8 @@ func checkDependencies(cfg *config.Config) {
 
 func splitOldNames(s string) []string {
 	var names []string
-	parts := strings.Split(s, ",")
-	for _, p := range parts {
-		trimmed := strings.TrimSpace(p)
+	for part := range strings.SplitSeq(s, ",") {
+		trimmed := strings.TrimSpace(part)
 		if trimmed != "" {
 			names = append(names, trimmed)
 		}

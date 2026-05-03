@@ -1,11 +1,11 @@
 package rewrite
 
 import (
-	"bytes"
 	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 
 	"github-to-codeberg/pkg/config"
 	"github-to-codeberg/pkg/shell"
@@ -27,14 +27,14 @@ func RewriteCommitsBatch(cfg *config.Config) error {
 	filterScript := filepath.Join(cfg.TempDir, "batch_filter.sh")
 
 	// Build the filter script
-	script := `#!/usr/bin/env bash
+	var script strings.Builder
+	script.WriteString(`#!/usr/bin/env bash
 OLD_NAMES_ARRAY=(
-`
+`)
 	for _, name := range cfg.OldNames {
-		script += fmt.Sprintf("    %q\n", name)
+		fmt.Fprintf(&script, "    %q\n", name)
 	}
-	script += `)
-
+	script.WriteString(`)
 for old_name in "${OLD_NAMES_ARRAY[@]}"; do
     if [ "$GIT_AUTHOR_NAME" = "$old_name" ]; then
         export GIT_AUTHOR_NAME="` + shell.EscapeShell(cfg.NewName) + `"
@@ -50,9 +50,9 @@ for old_name in "${OLD_NAMES_ARRAY[@]}"; do
         break
     fi
 done
-`
+`)
 
-	if err := os.WriteFile(filterScript, []byte(script), 0755); err != nil {
+	if err := os.WriteFile(filterScript, []byte(script.String()), 0755); err != nil {
 		return fmt.Errorf("failed to write filter script: %w", err)
 	}
 
@@ -122,22 +122,23 @@ func RewriteCommitsInteractive(cfg *config.Config) error {
 func generateInteractiveFilter(cfg *config.Config) (string, error) {
 	scriptPath := filepath.Join(cfg.TempDir, "filter.sh")
 
-	script := "case \"$GIT_COMMIT\" in\n"
+	var script strings.Builder
+	script.WriteString("case \"$GIT_COMMIT\" in\n")
 	for hash, override := range cfg.State.CommitOverrides {
 		if override.Skip {
-			script += fmt.Sprintf("    %s)\n        ;;\n", hash.String())
+			fmt.Fprintf(&script, "    %s)\n        ;;\n", hash.String())
 		} else {
-			script += fmt.Sprintf("    %s)\n", hash.String())
-			script += fmt.Sprintf("        export GIT_AUTHOR_NAME=\"%s\"\n", shell.EscapeShell(override.Name))
-			script += fmt.Sprintf("        export GIT_AUTHOR_EMAIL=\"%s\"\n", shell.EscapeShell(override.Email))
-			script += fmt.Sprintf("        export GIT_COMMITTER_NAME=\"%s\"\n", shell.EscapeShell(override.Name))
-			script += fmt.Sprintf("        export GIT_COMMITTER_EMAIL=\"%s\"\n", shell.EscapeShell(override.Email))
-			script += "        ;;\n"
+			fmt.Fprintf(&script, "    %s)\n", hash.String())
+			fmt.Fprintf(&script, "        export GIT_AUTHOR_NAME=\"%s\"\n", shell.EscapeShell(override.Name))
+			fmt.Fprintf(&script, "        export GIT_AUTHOR_EMAIL=\"%s\"\n", shell.EscapeShell(override.Email))
+			fmt.Fprintf(&script, "        export GIT_COMMITTER_NAME=\"%s\"\n", shell.EscapeShell(override.Name))
+			fmt.Fprintf(&script, "        export GIT_COMMITTER_EMAIL=\"%s\"\n", shell.EscapeShell(override.Email))
+			script.WriteString("        ;;\n")
 		}
 	}
-	script += "    *)\n        ;;\nesac\n"
+	script.WriteString("    *)\n        ;;\nesac\n")
 
-	if err := os.WriteFile(scriptPath, []byte(script), 0755); err != nil {
+	if err := os.WriteFile(scriptPath, []byte(script.String()), 0755); err != nil {
 		return "", fmt.Errorf("failed to write filter script: %w", err)
 	}
 
@@ -147,7 +148,7 @@ func generateInteractiveFilter(cfg *config.Config) (string, error) {
 func generateMessageFilter(cfg *config.Config) (string, error) {
 	scriptPath := filepath.Join(cfg.TempDir, "msg_filter.sh")
 
-	var script bytes.Buffer
+	var script strings.Builder
 	script.WriteString("#!/usr/bin/env bash\n")
 	script.WriteString("original_msg=$(cat)\n")
 
@@ -166,7 +167,7 @@ func generateMessageFilter(cfg *config.Config) (string, error) {
 		script.WriteString("printf '%s' \"$original_msg\"\n")
 	}
 
-	if err := os.WriteFile(scriptPath, script.Bytes(), 0755); err != nil {
+	if err := os.WriteFile(scriptPath, []byte(script.String()), 0755); err != nil {
 		return "", fmt.Errorf("failed to write message filter script: %w", err)
 	}
 

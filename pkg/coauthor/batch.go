@@ -156,8 +156,7 @@ func InteractiveCoauthorEdit(cfg *config.Config) {
 	}
 
 	var matchingCommits []string
-	lines := strings.Split(string(output), "\n")
-	for _, commitHash := range lines {
+	for commitHash := range strings.SplitSeq(string(output), "\n") {
 		if commitHash == "" {
 			continue
 		}
@@ -261,8 +260,7 @@ func matchesCoauthor(body string, name string, email string) bool {
 
 func extractMatchingLines(body string, name string, email string) []string {
 	var matches []string
-	lines := strings.Split(body, "\n")
-	for _, line := range lines {
+	for line := range strings.SplitSeq(body, "\n") {
 		if email != "" {
 			if strings.Contains(line, "Co-authored-by: "+name+" <"+email+">") {
 				matches = append(matches, line)

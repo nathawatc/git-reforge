@@ -6,6 +6,7 @@ import (
 	"io"
 	"os"
 	"os/exec"
+	"slices"
 	"strings"
 
 	"github.com/go-git/go-git/v5"
@@ -87,11 +88,8 @@ func ListCommitsByAuthor(tmpDir string, oldNames []string) ([]plumbing.Hash, err
 			return nil, fmt.Errorf("commit iteration error: %w", err)
 		}
 
-		for _, oldName := range oldNames {
-			if commit.Author.Name == oldName {
-				allHashes = append(allHashes, commit.Hash)
-				break
-			}
+		if slices.Contains(oldNames, commit.Author.Name) {
+			allHashes = append(allHashes, commit.Hash)
 		}
 	}
 
@@ -148,8 +146,7 @@ func containsCoauthorWithEmail(msg string, name string, email string) bool {
 }
 
 func containsPattern(msg string, pattern string) bool {
-	lines := strings.Split(msg, "\n")
-	for _, line := range lines {
+	for line := range strings.SplitSeq(msg, "\n") {
 		if strings.HasPrefix(line, pattern) {
 			return true
 		}
@@ -195,8 +192,7 @@ func ListAnnotatedTags(tmpDir string) ([]string, error) {
 		return nil, fmt.Errorf("git tag failed: %w", err)
 	}
 
-	lines := strings.Split(string(output), "\n")
-	for _, tag := range lines {
+	for tag := range strings.SplitSeq(string(output), "\n") {
 		if tag == "" {
 			continue
 		}

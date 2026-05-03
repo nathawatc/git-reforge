@@ -49,6 +49,6 @@ func (l *Logger) Header(msg string) {
 	fmt.Println()
 }
 
-func (l *Logger) Printf(format string, args ...interface{}) {
+func (l *Logger) Printf(format string, args ...any) {
 	fmt.Printf(format, args...)
 }

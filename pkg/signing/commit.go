@@ -140,8 +140,7 @@ func ResignTags(cfg *config.Config) error {
 	}
 
 	var annotatedTags []string
-	lines := strings.Split(string(output), "\n")
-	for _, tag := range lines {
+	for tag := range strings.SplitSeq(string(output), "\n") {
 		if tag == "" {
 			continue
 		}
