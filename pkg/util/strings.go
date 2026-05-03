@@ -7,10 +7,8 @@ func SplitLines(s string) []string {
 }
 
 func SplitFirstLine(s string) string {
-	for i := 0; i < len(s); i++ {
-		if s[i] == '\n' {
-			return s[:i]
-		}
+	if i := strings.Index(s, "\n"); i >= 0 {
+		return s[:i]
 	}
 	return s
 }
