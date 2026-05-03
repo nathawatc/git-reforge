@@ -112,12 +112,12 @@ func buildCoauthorMsgFilter(cfg *config.Config, outputPath string, modeType stri
 				script.WriteString("        ;;\n")
 			default:
 				fmt.Fprintf(&script, "    %s)\n", hash.String())
-				script.WriteString("        printf '%s' \"$input\"\n")
+				fmt.Fprintf(&script, "        printf '%%s' \"$input\"\n")
 				script.WriteString("        ;;\n")
 			}
 		}
 		script.WriteString("    *)\n")
-		script.WriteString("        printf '%s' \"$input\"\n")
+		script.WriteString("        printf '%%s' \"$input\"\n")
 		script.WriteString("        ;;\nesac\n")
 	}
 
