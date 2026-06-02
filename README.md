@@ -193,12 +193,14 @@ When using `-i` flag, you can review each commit and choose:
 
 With `--coauthor-mode interactive`, you can review each affected commit:
 
-| Key | Action                                  |
-| --- | --------------------------------------- |
-| `R` | Rewrite the trailer with the new values |
-| `D` | Delete (remove) the trailer             |
-| `S` | Skip (keep original trailer)            |
-| `Q` | Quit and apply decisions made so far    |
+| Key  | Action                                   |
+| ---- | ---------------------------------------- |
+| `R`  | Rewrite the trailer with the new values  |
+| `D`  | Delete (remove) the trailer              |
+| `S`  | Skip (keep original trailer)             |
+| `RA` | Rewrite all remaining commits            |
+| `DA` | Delete trailers in all remaining commits |
+| `Q`  | Quit and apply decisions made so far     |
 
 > [!NOTE]
 >
