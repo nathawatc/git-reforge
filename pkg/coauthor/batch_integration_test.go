@@ -126,6 +126,49 @@ func TestRewriteBatchRemoveNarrowsByCoauthorEmail(t *testing.T) {
 	}
 }
 
+func TestRewriteBatchHandlesApostropheInCoauthorNamesAndEmails(t *testing.T) {
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skip("git not available")
+	}
+
+	tmpDir := t.TempDir()
+	workDir := filepath.Join(tmpDir, "working")
+	if err := os.Mkdir(workDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+
+	runGit(t, workDir, "init")
+	runGit(t, workDir, "config", "user.name", "Test User")
+	runGit(t, workDir, "config", "user.email", "test@example.org")
+
+	writeFile(t, filepath.Join(workDir, "file.txt"), "contents\n")
+	messageFile := filepath.Join(tmpDir, "message.txt")
+	writeFile(t, messageFile, "Feature\n\nCo-authored-by: O'Neil <o'neil@example.org>\n")
+	runGit(t, workDir, "add", "file.txt")
+	runGit(t, workDir, "commit", "-F", messageFile)
+
+	cfg := config.New()
+	cfg.TempDir = tmpDir
+	cfg.CoauthorMode = "rewrite"
+	cfg.CoauthorOldName = "O'Neil"
+	cfg.CoauthorOldEmail = "o'neil@example.org"
+	cfg.CoauthorNewName = "D'Angelo"
+	cfg.CoauthorNewEmail = "d'angelo@example.org"
+	cfg.Logger = testLogger{}
+
+	if err := RewriteBatch(cfg); err != nil {
+		t.Fatalf("RewriteBatch() error = %v", err)
+	}
+
+	message := runGitOutput(t, workDir, "log", "-1", "--format=%B")
+	if !strings.Contains(message, "Co-authored-by: D'Angelo <d'angelo@example.org>") {
+		t.Fatalf("rewritten message missing apostrophe replacement:\n%s", message)
+	}
+	if strings.Contains(message, "O'Neil <o'neil@example.org>") {
+		t.Fatalf("rewritten message still contains old apostrophe trailer:\n%s", message)
+	}
+}
+
 func TestRewriteInteractiveAppliesPerCommitCoauthorDecision(t *testing.T) {
 	if _, err := exec.LookPath("git"); err != nil {
 		t.Skip("git not available")

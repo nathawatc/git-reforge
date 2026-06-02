@@ -94,9 +94,9 @@ func buildCoauthorMsgFilter(cfg *config.Config, outputPath string, modeType stri
 
 	if modeType == "batch" {
 		if cfg.CoauthorMode == "remove" {
-			fmt.Fprintf(&script, "printf '%%s' \"$input\" | sed -E '/^%s$/d'\n", sedMatchPattern)
+			fmt.Fprintf(&script, "printf '%%s' \"$input\" | sed -E %s\n", shell.QuoteSingle(fmt.Sprintf("/^%s$/d", sedMatchPattern)))
 		} else {
-			fmt.Fprintf(&script, "printf '%%s' \"$input\" | sed -E 's/^%s$/%s/'\n", sedMatchPattern, newTrailer)
+			fmt.Fprintf(&script, "printf '%%s' \"$input\" | sed -E %s\n", shell.QuoteSingle(fmt.Sprintf("s/^%s$/%s/", sedMatchPattern, newTrailer)))
 		}
 	} else {
 		script.WriteString("case \"$GIT_COMMIT\" in\n")
@@ -104,11 +104,11 @@ func buildCoauthorMsgFilter(cfg *config.Config, outputPath string, modeType stri
 			switch action {
 			case "remove":
 				fmt.Fprintf(&script, "    %s)\n", hash.String())
-				fmt.Fprintf(&script, "        printf '%%s' \"$input\" | sed -E '/^%s$/d'\n", sedMatchPattern)
+				fmt.Fprintf(&script, "        printf '%%s' \"$input\" | sed -E %s\n", shell.QuoteSingle(fmt.Sprintf("/^%s$/d", sedMatchPattern)))
 				script.WriteString("        ;;\n")
 			case "rewrite":
 				fmt.Fprintf(&script, "    %s)\n", hash.String())
-				fmt.Fprintf(&script, "        printf '%%s' \"$input\" | sed -E 's/^%s$/%s/'\n", sedMatchPattern, newTrailer)
+				fmt.Fprintf(&script, "        printf '%%s' \"$input\" | sed -E %s\n", shell.QuoteSingle(fmt.Sprintf("s/^%s$/%s/", sedMatchPattern, newTrailer)))
 				script.WriteString("        ;;\n")
 			default:
 				fmt.Fprintf(&script, "    %s)\n", hash.String())
