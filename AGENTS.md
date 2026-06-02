@@ -28,6 +28,9 @@ go test ./pkg/shell/... -v
 
 # Lint
 golangci-lint run
+
+# Cross-Platform Build
+goreleaser build --snapshot --clean
 ```
 
 ## Architecture

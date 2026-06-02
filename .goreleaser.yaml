@@ -1,0 +1,40 @@
+version: 2
+
+project_name: github-to-codeberg
+
+before:
+  hooks:
+    - go mod tidy
+
+builds:
+  - id: github-to-codeberg
+    main: .
+    binary: >-
+      {{ .ProjectName }}-{{ .Os }}-{{ .Arch }}
+    no_unique_dist_dir: true
+    env:
+      - CGO_ENABLED=0
+    flags:
+      - -mod=readonly
+      - -trimpath
+      - -buildvcs=false
+    ldflags:
+      - -s -w -buildid=
+    goos:
+      - linux
+      - darwin
+      - windows
+    goarch:
+      - amd64
+      - arm64
+    ignore:
+      - goos: darwin
+        goarch: amd64
+      - goos: windows
+        goarch: arm64
+
+checksum:
+  name_template: SHA256SUMS
+
+snapshot:
+  version_template: "{{ incpatch .Version }}-next"

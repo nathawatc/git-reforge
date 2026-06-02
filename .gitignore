@@ -32,4 +32,7 @@ go.work.sum
 # .idea/
 # .vscode/
 
+# ---> Go Releaser
+dist/
+
 github-to-codeberg
