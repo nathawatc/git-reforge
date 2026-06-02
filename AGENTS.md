@@ -14,6 +14,9 @@ batch/interactive workflows.
 # Build binary
 go build .
 
+# Format code and optimize imports
+goimports -w -local github-to-codeberg .
+
 # Run tests
 go test ./...
 
@@ -34,12 +37,12 @@ pkg/
 	migration/run.go      # Run lifecycle + cleanupTempDir; owns clone → rewrite → coauthor → signing → save/push → summary
 	migration/run_test.go # cleanupTempDir unit test
 	migration/run_integration_test.go # end-to-end pipeline against local repos
-	git/clone.go          # Clone (bare mirror → working), push, save (handles TTY & symlinks)
+	git/clone.go          # Clone (bare mirror → working), push/save, failed-push recovery, temp cleanup
 	logging/logger.go     # slog wrapper with ANSI colors (imports pkg/ui)
 	rewrite/batch.go      # RewriteCommitsBatch, RewriteCommitsInteractive, filter generation
 	coauthor/batch.go     # RunCoauthorPhase, batch/interactive coauthor filtering
 	signing/commit.go     # HandleSigning (keep/none/gpg/ssh), ResignTags
-	shell/escape.go       # EscapeShell, EscapeSed, EscapeDoubleQuoted, QuoteSingle — shared shell escaping utilities
+	shell/escape.go       # EscapeShell, EscapeSed, EscapeDoubleQuoted, QuoteSingle — shared shell/sed escaping utilities
 	ui/
 		colors.go           # ANSI color constants (Red, Green, Yellow, Bold, NC, etc.)
 		display.go          # DisplayConfig (preflight prompt + summary)
@@ -58,18 +61,18 @@ pkg/
 
 ### Key Decisions
 
-| Decision          | Choice                                                                                                   |
-| ----------------- | -------------------------------------------------------------------------------------------------------- |
-| Git rewriting     | Uses `git filter-branch` via `exec.Command` (not pure go-git plumbing for rewrite)                       |
-| Config validation | `pkg/config/validation.go` owns `ParseOldNames`, `Validate`, and dependency checks                       |
-| Migration runner  | `pkg/migration/run.go` owns clone → rewrite → coauthor → signing → save/push → summary/cleanup           |
-| Config state      | Context struct passed as first arg; interactive state in `cfg.State` field                               |
-| Error handling    | Functions return `error`, CLI layer logs and exits with code 1                                           |
-| Temp dir          | `os.MkdirTemp()` root; `cfg.WorkDir()` returns `$TEMP_DIR/working`; cleanup deferred in runner           |
-| Logger            | `log/slog` stdlib with ANSI colors via `pkg/ui` constants                                                |
-| CLI flags         | `urfave/cli/v3` with explicit flag types; `--old-name` uses `StringSliceFlag` and `config.ParseOldNames` |
-| Shell escaping    | `pkg/shell/escape.go` — EscapeShell for bash, EscapeSed for sed, etc.                                    |
-| Colors            | Single source: `pkg/ui/colors.go` — all packages import `pkg/ui` for constants                           |
+| Decision          | Choice                                                                                                                          |
+| ----------------- | ------------------------------------------------------------------------------------------------------------------------------- |
+| Git rewriting     | Uses `git filter-branch` via `exec.Command` (not pure go-git plumbing for rewrite)                                              |
+| Config validation | `pkg/config/validation.go` owns `ParseOldNames`, `Validate`, and dependency checks                                              |
+| Migration runner  | `pkg/migration/run.go` owns clone → rewrite → coauthor → signing → save/push → summary/cleanup                                  |
+| Config state      | Context struct passed as first arg; interactive state in `cfg.State` field                                                      |
+| Error handling    | Functions return `error`, CLI layer logs and exits with code 1                                                                  |
+| Temp dir          | `os.MkdirTemp()` root; `cfg.WorkDir()` returns `$TEMP_DIR/working`; clone failures self-clean; runner cleans only after success |
+| Logger            | `log/slog` stdlib with ANSI colors via `pkg/ui` constants                                                                       |
+| CLI flags         | `urfave/cli/v3` with explicit flag types; `--old-name` uses `StringSliceFlag` and `config.ParseOldNames`                        |
+| Shell escaping    | `pkg/shell/escape.go`; coauthor sed scripts must shell-quote the full sed program with `QuoteSingle` after sed escaping         |
+| Colors            | Single source: `pkg/ui/colors.go` — all packages import `pkg/ui` for constants                                                  |
 
 ### Interactive State
 
@@ -93,12 +96,19 @@ Runtime choices from interactive mode live in `InteractiveState`, accessed via `
 Always uses explicit refspec: `git push --force origin "refs/tags/*:refs/tags/*"` — never `--tags`,
 which silently skips annotated tags whose SHA changed after re-signing.
 
+`git.Push` must first check for tag refs and skip the tag push when the repository has no tags.
+If tags exist and the explicit tag push is rejected, return an error after offering the push-failure
+save/cleanup recovery path.
+
+`signing.ResignTags` processes every annotated tag before returning. Accumulate tag failures with
+`errors.Join`, keep individual failure messages starting with `failed to ...`, and let
+`HandleSigning` propagate the joined error.
+
 ## Common Commands
 
 ```bash
 # Basic migration
-./github-to-codeberg -s https://github.com/user/repo.git -d ssh://git@codeberg.org/user/repo.git -o
-"OldName" -e user@noreply.codeberg.org
+./github-to-codeberg -s https://github.com/user/repo.git -d ssh://git@codeberg.org/user/repo.git -o "OldName" -e user@noreply.codeberg.org
 
 # Interactive mode
 ./github-to-codeberg -s <url> -d <url> -o "OldName" -e <email> -i
