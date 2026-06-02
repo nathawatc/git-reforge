@@ -30,6 +30,26 @@ func TestEscapeShellSingleQuote(t *testing.T) {
 	}
 }
 
+func TestEscapeDoubleQuoted(t *testing.T) {
+	tests := []struct {
+		input string
+		want  string
+	}{
+		{"simple", "simple"},
+		{`with\ backslash`, `with\\ backslash`},
+		{`with"quote`, `with\"quote`},
+		{"with$dollar", `with\$dollar`},
+		{"with'single", "with'single"},
+	}
+
+	for _, tt := range tests {
+		got := EscapeDoubleQuoted(tt.input)
+		if got != tt.want {
+			t.Errorf("EscapeDoubleQuoted(%q) = %q want %q", tt.input, got, tt.want)
+		}
+	}
+}
+
 func TestEscapeSed(t *testing.T) {
 	tests := []struct {
 		input    string
@@ -55,5 +75,42 @@ func TestEscapeSedEmail(t *testing.T) {
 	got := EscapeSed(input)
 	if got != expected {
 		t.Errorf("EscapeSed(%q) = %q want %q", input, got, expected)
+	}
+}
+
+func TestEscapeSedReplacement(t *testing.T) {
+	tests := []struct {
+		input string
+		want  string
+	}{
+		{"user.name@example.org", "user.name@example.org"},
+		{"A&B", `A\&B`},
+		{"with/slash", `with\/slash`},
+		{`with\backslash`, `with\\backslash`},
+	}
+
+	for _, tt := range tests {
+		got := EscapeSedReplacement(tt.input)
+		if got != tt.want {
+			t.Errorf("EscapeSedReplacement(%q) = %q want %q", tt.input, got, tt.want)
+		}
+	}
+}
+
+func TestQuoteSingle(t *testing.T) {
+	tests := []struct {
+		input string
+		want  string
+	}{
+		{"simple", "'simple'"},
+		{"with space", "'with space'"},
+		{"with'single", "'with'\\''single'"},
+	}
+
+	for _, tt := range tests {
+		got := QuoteSingle(tt.input)
+		if got != tt.want {
+			t.Errorf("QuoteSingle(%q) = %q want %q", tt.input, got, tt.want)
+		}
 	}
 }
