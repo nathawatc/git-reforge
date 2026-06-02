@@ -73,6 +73,7 @@ func convertBareToWorking(tmpDir string) error {
 }
 
 func createLocalBranchesFromOrigin(workDir string) error {
+	current := currentBranchName(workDir)
 	refs, err := listRefs(workDir, "refs/remotes/origin")
 	if err != nil {
 		return err
@@ -85,6 +86,9 @@ func createLocalBranchesFromOrigin(workDir string) error {
 		if branchName == "" || branchName == ref {
 			continue
 		}
+		if branchName == current {
+			continue
+		}
 		cmd := exec.Command("git", "branch", "--force", branchName, ref)
 		cmd.Dir = workDir
 		if err := cmd.Run(); err != nil {
@@ -92,6 +96,16 @@ func createLocalBranchesFromOrigin(workDir string) error {
 		}
 	}
 	return nil
+}
+
+func currentBranchName(workDir string) string {
+	cmd := exec.Command("git", "symbolic-ref", "--short", "HEAD")
+	cmd.Dir = workDir
+	output, err := cmd.Output()
+	if err != nil {
+		return ""
+	}
+	return strings.TrimSpace(string(output))
 }
 
 func checkoutFirstAvailableBranch(workDir string) error {
