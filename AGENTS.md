@@ -27,9 +27,13 @@ golangci-lint run
 ## Architecture
 
 ```text
-main.go                 # CLI entry point — urfave/cli/v3 flags, orchestrates flow
+main.go                 # CLI entry point — urfave/cli/v3 flags, validation/dependency preflight, user prompt, hands off to migration.Run
 pkg/
 	config/config.go      # Config struct, InteractiveState, WorkDir() method
+	config/validation.go  # ParseOldNames, Validate, CheckDependencies
+	migration/run.go      # Run lifecycle + cleanupTempDir; owns clone → rewrite → coauthor → signing → save/push → summary
+	migration/run_test.go # cleanupTempDir unit test
+	migration/run_integration_test.go # end-to-end pipeline against local repos
 	git/clone.go          # Clone (bare mirror → working), push, save (handles TTY & symlinks)
 	logging/logger.go     # slog wrapper with ANSI colors (imports pkg/ui)
 	rewrite/batch.go      # RewriteCommitsBatch, RewriteCommitsInteractive, filter generation
@@ -38,33 +42,34 @@ pkg/
 	shell/escape.go       # EscapeShell, EscapeSed, EscapeDoubleQuoted, QuoteSingle — shared shell escaping utilities
 	ui/
 		colors.go           # ANSI color constants (Red, Green, Yellow, Bold, NC, etc.)
-		display.go          # DisplayConfig, ShowSummary
+		display.go          # DisplayConfig (preflight prompt + summary)
 		input.go            # PromptSession — TTY / stdin reader wrapper
 		interactive.go      # InteractiveEdit — per-commit TTY menu loop
 ```
 
 ### Execution Flow
 
-1. `main()` → parse args via urfave/cli/v3 → validateArgs → checkDependencies
-2. `git.Clone(cfg)` → bare mirror at `$TEMP_DIR/repo.git`, working at `$TEMP_DIR/working`
-3. Batch: `rewrite.RewriteCommitsBatch` | Interactive: `ui.InteractiveEdit` → `rewrite.RewriteCommitsInteractive`
-4. `coauthor.RunCoauthorPhase`
-5. `signing.HandleSigning` → ResignTags
-6. `git.Save` or `git.Push` → `ui.ShowSummary`
-7. `os.RemoveAll(cfg.TempDir)` on exit
+1. `main()` → parse args via urfave/cli/v3 → populate cfg → `config.Validate` → `config.CheckDependencies` → `ui.DisplayConfig` <!-- rumdl-disable-line MD013 -->
+2. `migration.Run(cfg)` → `git.Clone(cfg)` → Batch: `rewrite.RewriteCommitsBatch` | Interactive: `ui.InteractiveEdit` → `rewrite.RewriteCommitsInteractive` <!-- rumdl-disable-line MD013 -->
+3. `coauthor.RunCoauthorPhase`
+4. `signing.HandleSigning` → `ResignTags`
+5. `git.Save` or `git.Push` → `ui.ShowSummary`
+6. `cleanupTempDir(cfg)` deferred inside `migration.Run`
 
 ### Key Decisions
 
-| Decision       | Choice                                                                             |
-| -------------- | ---------------------------------------------------------------------------------- |
-| Git rewriting  | Uses `git filter-branch` via `exec.Command` (not pure go-git plumbing for rewrite) |
-| Config state   | Context struct passed as first arg; interactive state in `cfg.State` field         |
-| Error handling | Functions return `error`, CLI layer logs and exits with code 1                     |
-| Temp dir       | `os.MkdirTemp()` root; `cfg.WorkDir()` returns `$TEMP_DIR/working`                 |
-| Logger         | `log/slog` stdlib with ANSI colors via `pkg/ui` constants                          |
-| CLI flags      | `urfave/cli/v3` with explicit flag types; `--old-name` uses `StringSliceFlag`      |
-| Shell escaping | `pkg/shell/escape.go` — EscapeShell for bash, EscapeSed for sed, etc.              |
-| Colors         | Single source: `pkg/ui/colors.go` — all packages import `pkg/ui` for constants     |
+| Decision          | Choice                                                                                                   |
+| ----------------- | -------------------------------------------------------------------------------------------------------- |
+| Git rewriting     | Uses `git filter-branch` via `exec.Command` (not pure go-git plumbing for rewrite)                       |
+| Config validation | `pkg/config/validation.go` owns `ParseOldNames`, `Validate`, and dependency checks                       |
+| Migration runner  | `pkg/migration/run.go` owns clone → rewrite → coauthor → signing → save/push → summary/cleanup           |
+| Config state      | Context struct passed as first arg; interactive state in `cfg.State` field                               |
+| Error handling    | Functions return `error`, CLI layer logs and exits with code 1                                           |
+| Temp dir          | `os.MkdirTemp()` root; `cfg.WorkDir()` returns `$TEMP_DIR/working`; cleanup deferred in runner           |
+| Logger            | `log/slog` stdlib with ANSI colors via `pkg/ui` constants                                                |
+| CLI flags         | `urfave/cli/v3` with explicit flag types; `--old-name` uses `StringSliceFlag` and `config.ParseOldNames` |
+| Shell escaping    | `pkg/shell/escape.go` — EscapeShell for bash, EscapeSed for sed, etc.                                    |
+| Colors            | Single source: `pkg/ui/colors.go` — all packages import `pkg/ui` for constants                           |
 
 ### Interactive State
 
