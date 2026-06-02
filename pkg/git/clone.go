@@ -405,7 +405,7 @@ func listRefs(workDir string, namespace string) ([]string, error) {
 	return refs, nil
 }
 
-func PromptSaveOrCleanup(cfg *config.Config, failedStep string) error {
+func PromptSaveOrCleanup(cfg *config.Config, failedStep string) (retErr error) {
 	if cfg.SaveDir != "" {
 		cfg.Logger.Warning("Push failed during " + failedStep + ".")
 		cfg.Logger.Info("The rewritten repository will still be saved to: " + cfg.SaveDir)
@@ -416,19 +416,30 @@ func PromptSaveOrCleanup(cfg *config.Config, failedStep string) error {
 	if err != nil {
 		return fmt.Errorf("failed to push branches and no terminal is available to choose save or cleanup: %w", err)
 	}
-	defer tty.Close()
+	defer func() {
+		if closeErr := tty.Close(); closeErr != nil && retErr == nil {
+			retErr = fmt.Errorf("failed to close terminal: %w", closeErr)
+		}
+	}()
 
-	fmt.Fprintln(tty)
-	fmt.Fprintf(tty, "The %s to Codeberg failed.\n", failedStep)
-	fmt.Fprintln(tty, "The rewritten repository is still available in the temporary directory.")
-	fmt.Fprintln(tty)
-	fmt.Fprintln(tty, "  [S]ave    - copy the rewritten repository to a local path")
-	fmt.Fprintln(tty, "  [C]leanup - discard the temporary directory and exit")
-	fmt.Fprintln(tty)
+	if _, err := fmt.Fprintf(tty,
+		"\n"+
+			"The %s to Codeberg failed.\n"+
+			"The rewritten repository is still available in the temporary directory.\n"+
+			"\n"+
+			"  [S]ave    - copy the rewritten repository to a local path\n"+
+			"  [C]leanup - discard the temporary directory and exit\n"+
+			"\n",
+		failedStep,
+	); err != nil {
+		return fmt.Errorf("failed to write push recovery message: %w", err)
+	}
 
 	reader := bufio.NewReader(tty)
 	for {
-		fmt.Fprint(tty, "  Choice [S/C]: ")
+		if _, err := fmt.Fprint(tty, "  Choice [S/C]: "); err != nil {
+			return fmt.Errorf("failed to write push recovery prompt: %w", err)
+		}
 		choice, err := reader.ReadString('\n')
 		if err != nil {
 			return fmt.Errorf("failed to read push recovery choice: %w", err)
@@ -448,7 +459,9 @@ func PromptSaveOrCleanup(cfg *config.Config, failedStep string) error {
 
 func promptSavePath(cfg *config.Config, tty *os.File, reader *bufio.Reader) error {
 	for {
-		fmt.Fprint(tty, "  Enter destination path: ")
+		if _, err := fmt.Fprint(tty, "  Enter destination path: "); err != nil {
+			return fmt.Errorf("failed to write save path prompt: %w", err)
+		}
 		savePath, err := reader.ReadString('\n')
 		if err != nil {
 			return fmt.Errorf("failed to read save path: %w", err)
@@ -471,10 +484,16 @@ func promptSavePath(cfg *config.Config, tty *os.File, reader *bufio.Reader) erro
 
 		cfg.Logger.Success("Repository saved to: " + savePath)
 		cfg.Logger.Info("You can push it later with:")
-		fmt.Fprintf(tty, "    cd %s\n", savePath)
-		fmt.Fprintf(tty, "    git remote set-url origin %s\n", cfg.DestURL)
-		fmt.Fprintln(tty, "    git push --all --force")
-		fmt.Fprintln(tty, "    git push --force origin \"refs/tags/*:refs/tags/*\"")
+		if _, err := fmt.Fprintf(tty,
+			"    cd %s\n"+
+				"    git remote set-url origin %s\n"+
+				"    git push --all --force\n"+
+				"    git push --force origin \"refs/tags/*:refs/tags/*\"\n",
+			savePath,
+			cfg.DestURL,
+		); err != nil {
+			return fmt.Errorf("failed to write save instructions: %w", err)
+		}
 		return nil
 	}
 }

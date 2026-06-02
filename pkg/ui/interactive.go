@@ -141,7 +141,11 @@ func getCommitDetails(tmpDir string, hash string) (authorName, authorEmail, auth
 func promptCommitChoice(commitHash string, remainingCommits []string, hasOverride bool, cfg *config.Config) string {
 	hash := plumbing.NewHash(commitHash)
 	prompts := NewPromptSession()
-	defer prompts.Close()
+	defer func() {
+		if err := prompts.Close(); err != nil {
+			cfg.Logger.Warning(err.Error())
+		}
+	}()
 
 	for {
 		if hasOverride {
@@ -156,17 +160,30 @@ func promptCommitChoice(commitHash string, remainingCommits []string, hasOverrid
 		fmt.Printf("  %s[Q]uit%s - Stop and apply changes made so far\n", Red, NC)
 		fmt.Println()
 
-		choice := strings.ToUpper(prompts.ReadLine("  Choice [E/A/M/S/D/Q]: "))
+		choice, err := prompts.ReadLine("  Choice [E/A/M/S/D/Q]: ")
+		if err != nil {
+			cfg.Logger.Warning("Failed to read interactive choice: " + err.Error())
+			return "quit"
+		}
+		choice = strings.ToUpper(choice)
 
 		switch choice {
 		case "E":
 			fmt.Println()
-			customName := prompts.ReadLine("  New author name [" + cfg.NewName + "]: ")
+			customName, err := prompts.ReadLine("  New author name [" + cfg.NewName + "]: ")
+			if err != nil {
+				cfg.Logger.Warning("Failed to read author name: " + err.Error())
+				return "quit"
+			}
 			if customName == "" {
 				customName = cfg.NewName
 			}
 
-			customEmail := prompts.ReadLine("  New author email [" + cfg.NewEmail + "]: ")
+			customEmail, err := prompts.ReadLine("  New author email [" + cfg.NewEmail + "]: ")
+			if err != nil {
+				cfg.Logger.Warning("Failed to read author email: " + err.Error())
+				return "quit"
+			}
 			if customEmail == "" {
 				customEmail = cfg.NewEmail
 			}
@@ -184,7 +201,11 @@ func promptCommitChoice(commitHash string, remainingCommits []string, hasOverrid
 			fmt.Printf("    %s\n", getCommitSubject(cfg.TempDir, commitHash))
 			fmt.Println()
 			fmt.Printf("  %sEnter new commit message (or press Enter to keep current):%s\n", Cyan, NC)
-			customMessage := prompts.ReadLine("")
+			customMessage, err := prompts.ReadLine("")
+			if err != nil {
+				cfg.Logger.Warning("Failed to read commit message: " + err.Error())
+				return "quit"
+			}
 			if customMessage != "" {
 				cfg.State.CommitMessages[hash] = customMessage
 				cfg.Logger.Success("Custom message saved for commit " + commitHash[:12])

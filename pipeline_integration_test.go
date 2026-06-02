@@ -74,7 +74,12 @@ func TestNonInteractiveMigrationPipelineLocalRepos(t *testing.T) {
 	if err := git.Clone(cfg); err != nil {
 		t.Fatalf("Clone() error = %v", err)
 	}
-	defer os.RemoveAll(cfg.TempDir)
+	tempDir := cfg.TempDir
+	t.Cleanup(func() {
+		if err := os.RemoveAll(tempDir); err != nil {
+			t.Errorf("failed to remove temp dir %s: %v", tempDir, err)
+		}
+	})
 	if err := rewrite.RewriteCommitsBatch(cfg); err != nil {
 		t.Fatalf("RewriteCommitsBatch() error = %v", err)
 	}

@@ -280,7 +280,11 @@ func extractMatchingLines(body string, name string, email string) []string {
 
 func promptLoop(commitHash string, remainingCommits []string, cfg *config.Config) string {
 	prompts := ui.NewPromptSession()
-	defer prompts.Close()
+	defer func() {
+		if err := prompts.Close(); err != nil {
+			cfg.Logger.Warning(err.Error())
+		}
+	}()
 
 	for {
 		fmt.Printf("  %s[R]ewrite%s - Replace trailer with new Co-authored-by\n", ui.Green, ui.NC)
@@ -291,7 +295,11 @@ func promptLoop(commitHash string, remainingCommits []string, cfg *config.Config
 		fmt.Printf("  %s[Q]uit%s   - Stop and apply decisions made so far\n", ui.Red, ui.NC)
 		fmt.Println()
 
-		choice := prompts.ReadLine("  Choice [R/D/S/RA/DA/Q]: ")
+		choice, err := prompts.ReadLine("  Choice [R/D/S/RA/DA/Q]: ")
+		if err != nil {
+			cfg.Logger.Warning("Failed to read coauthor choice: " + err.Error())
+			return "quit"
+		}
 
 		hash := plumbing.NewHash(commitHash)
 

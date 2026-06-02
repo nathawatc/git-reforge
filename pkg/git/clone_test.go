@@ -108,7 +108,12 @@ func TestCloneCreatesMirrorAndWorkingRepository(t *testing.T) {
 	if err := Clone(cfg); err != nil {
 		t.Fatalf("Clone() error = %v", err)
 	}
-	defer os.RemoveAll(cfg.TempDir)
+	tempDir := cfg.TempDir
+	t.Cleanup(func() {
+		if err := os.RemoveAll(tempDir); err != nil {
+			t.Errorf("failed to remove temp dir %s: %v", tempDir, err)
+		}
+	})
 
 	if _, err := os.Stat(filepath.Join(cfg.TempDir, "repo.git")); err != nil {
 		t.Fatalf("mirror repo missing: %v", err)

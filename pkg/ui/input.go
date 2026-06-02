@@ -31,17 +31,23 @@ func newPromptSession(input io.Reader, output io.Writer, file *os.File) *PromptS
 	}
 }
 
-func (p *PromptSession) Close() {
-	if p.file != nil {
-		_ = p.file.Close()
+func (p *PromptSession) Close() error {
+	if p.file == nil {
+		return nil
 	}
+	if err := p.file.Close(); err != nil {
+		return fmt.Errorf("failed to close prompt session: %w", err)
+	}
+	return nil
 }
 
-func (p *PromptSession) ReadLine(prompt string) string {
-	fmt.Fprint(p.output, prompt)
+func (p *PromptSession) ReadLine(prompt string) (string, error) {
+	if _, err := fmt.Fprint(p.output, prompt); err != nil {
+		return "", fmt.Errorf("failed to write prompt: %w", err)
+	}
 	input, err := p.reader.ReadString('\n')
 	if err != nil {
-		return ""
+		return "", fmt.Errorf("failed to read input: %w", err)
 	}
-	return strings.TrimSpace(input)
+	return strings.TrimSpace(input), nil
 }
