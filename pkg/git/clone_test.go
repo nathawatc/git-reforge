@@ -1,0 +1,264 @@
+package git
+
+import (
+	"os"
+	"os/exec"
+	"path/filepath"
+	"strings"
+	"testing"
+
+	"github-to-codeberg/pkg/config"
+)
+
+type testLogger struct{}
+
+func (testLogger) Header(string)  {}
+func (testLogger) Info(string)    {}
+func (testLogger) Success(string) {}
+func (testLogger) Warning(string) {}
+func (testLogger) Error(string)   {}
+
+func TestPushWarnsAndContinuesWhenTagPushFails(t *testing.T) {
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skip("git not available")
+	}
+
+	tmpDir := t.TempDir()
+	workDir := filepath.Join(tmpDir, "working")
+	remoteDir := filepath.Join(tmpDir, "remote.git")
+	if err := os.Mkdir(workDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+
+	runGit(t, tmpDir, "init", "--bare", remoteDir)
+	writeFile(t, filepath.Join(remoteDir, "hooks", "pre-receive"), `#!/usr/bin/env bash
+while read -r _old _new ref; do
+  case "$ref" in
+    refs/tags/*) exit 1 ;;
+  esac
+done
+exit 0
+`)
+	if err := os.Chmod(filepath.Join(remoteDir, "hooks", "pre-receive"), 0755); err != nil {
+		t.Fatal(err)
+	}
+
+	runGit(t, workDir, "init")
+	runGit(t, workDir, "config", "user.name", "Test User")
+	runGit(t, workDir, "config", "user.email", "test@example.org")
+	writeFile(t, filepath.Join(workDir, "file.txt"), "contents\n")
+	runGit(t, workDir, "add", "file.txt")
+	runGit(t, workDir, "commit", "-m", "initial")
+	head := strings.TrimSpace(runGitOutput(t, workDir, "rev-parse", "HEAD"))
+	runGit(t, workDir, "update-ref", "refs/tags/v1.0.0", head)
+	runGit(t, workDir, "remote", "add", "origin", remoteDir)
+
+	cfg := config.New()
+	cfg.TempDir = tmpDir
+	cfg.DestURL = remoteDir
+	cfg.Logger = testLogger{}
+
+	if err := Push(cfg); err != nil {
+		t.Fatalf("Push() error = %v want nil", err)
+	}
+
+	branches := runGitOutput(t, remoteDir, "for-each-ref", "--format=%(refname)", "refs/heads")
+	if branches == "" {
+		t.Fatal("remote has no pushed branches")
+	}
+
+	tags := runGitOutput(t, remoteDir, "for-each-ref", "--format=%(refname)", "refs/tags")
+	if tags != "" {
+		t.Fatalf("remote tags = %q want none", tags)
+	}
+}
+
+func TestCloneCreatesMirrorAndWorkingRepository(t *testing.T) {
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skip("git not available")
+	}
+
+	root := t.TempDir()
+	sourceDir := filepath.Join(root, "source.git")
+	seedDir := filepath.Join(root, "seed")
+
+	runGit(t, root, "init", "--bare", sourceDir)
+	runGit(t, root, "clone", sourceDir, seedDir)
+	runGit(t, seedDir, "config", "user.name", "Test User")
+	runGit(t, seedDir, "config", "user.email", "test@example.org")
+
+	writeFile(t, filepath.Join(seedDir, "main.txt"), "main\n")
+	runGit(t, seedDir, "add", "main.txt")
+	runGit(t, seedDir, "commit", "-m", "main")
+	runGit(t, seedDir, "branch", "-M", "main")
+	head := strings.TrimSpace(runGitOutput(t, seedDir, "rev-parse", "HEAD"))
+	runGit(t, seedDir, "update-ref", "refs/tags/v1.0.0", head)
+	runGit(t, seedDir, "push", "origin", "main", "v1.0.0")
+
+	runGit(t, seedDir, "checkout", "-b", "feature")
+	writeFile(t, filepath.Join(seedDir, "feature.txt"), "feature\n")
+	runGit(t, seedDir, "add", "feature.txt")
+	runGit(t, seedDir, "commit", "-m", "feature")
+	runGit(t, seedDir, "push", "origin", "feature")
+
+	cfg := config.New()
+	cfg.SourceURL = sourceDir
+	cfg.Logger = testLogger{}
+
+	if err := Clone(cfg); err != nil {
+		t.Fatalf("Clone() error = %v", err)
+	}
+	defer os.RemoveAll(cfg.TempDir)
+
+	if _, err := os.Stat(filepath.Join(cfg.TempDir, "repo.git")); err != nil {
+		t.Fatalf("mirror repo missing: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(cfg.TempDir, "working", ".git")); err != nil {
+		t.Fatalf("working repo missing: %v", err)
+	}
+
+	refs := runGitOutput(t, filepath.Join(cfg.TempDir, "working"), "for-each-ref", "--format=%(refname)")
+	for _, ref := range []string{
+		"refs/heads/main",
+		"refs/heads/feature",
+		"refs/remotes/origin/main",
+		"refs/remotes/origin/feature",
+		"refs/tags/v1.0.0",
+	} {
+		if !strings.Contains(refs, ref+"\n") {
+			t.Fatalf("working refs = %q missing %s", refs, ref)
+		}
+	}
+}
+
+func TestPushPushesMirrorClonedRemoteTrackingBranches(t *testing.T) {
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skip("git not available")
+	}
+
+	tmpDir := t.TempDir()
+	sourceDir := filepath.Join(tmpDir, "source.git")
+	seedDir := filepath.Join(tmpDir, "seed")
+	destDir := filepath.Join(tmpDir, "dest.git")
+
+	runGit(t, tmpDir, "init", "--bare", sourceDir)
+	runGit(t, tmpDir, "clone", sourceDir, seedDir)
+	runGit(t, seedDir, "config", "user.name", "Test User")
+	runGit(t, seedDir, "config", "user.email", "test@example.org")
+
+	writeFile(t, filepath.Join(seedDir, "file.txt"), "main\n")
+	runGit(t, seedDir, "add", "file.txt")
+	runGit(t, seedDir, "commit", "-m", "main")
+	runGit(t, seedDir, "branch", "-M", "main")
+	runGit(t, seedDir, "push", "origin", "main")
+
+	runGit(t, seedDir, "checkout", "-b", "feature")
+	writeFile(t, filepath.Join(seedDir, "feature.txt"), "feature\n")
+	runGit(t, seedDir, "add", "feature.txt")
+	runGit(t, seedDir, "commit", "-m", "feature")
+	runGit(t, seedDir, "push", "origin", "feature")
+
+	runGit(t, tmpDir, "clone", "--mirror", sourceDir, filepath.Join(tmpDir, "repo.git"))
+	if err := convertBareToWorking(tmpDir); err != nil {
+		t.Fatalf("convertBareToWorking() error = %v", err)
+	}
+	runGit(t, tmpDir, "init", "--bare", destDir)
+
+	cfg := config.New()
+	cfg.TempDir = tmpDir
+	cfg.DestURL = destDir
+	cfg.Logger = testLogger{}
+
+	if err := Push(cfg); err != nil {
+		t.Fatalf("Push() error = %v", err)
+	}
+
+	branches := runGitOutput(t, destDir, "for-each-ref", "--format=%(refname)", "refs/heads")
+	for _, branch := range []string{"refs/heads/main", "refs/heads/feature"} {
+		if !strings.Contains(branches, branch+"\n") {
+			t.Fatalf("destination branches = %q missing %s", branches, branch)
+		}
+	}
+}
+
+func TestSavePreservesSymlinks(t *testing.T) {
+	tmpDir := t.TempDir()
+	workDir := filepath.Join(tmpDir, "working")
+	saveDir := filepath.Join(tmpDir, "saved")
+	if err := os.Mkdir(workDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	privateDir := filepath.Join(workDir, "private")
+	if err := os.Mkdir(privateDir, 0700); err != nil {
+		t.Fatal(err)
+	}
+
+	writeFile(t, filepath.Join(workDir, "target.txt"), "contents\n")
+	writeFile(t, filepath.Join(privateDir, "secret.txt"), "secret\n")
+	writeFile(t, filepath.Join(workDir, "..metadata"), "metadata\n")
+	executablePath := filepath.Join(workDir, "run.sh")
+	writeFile(t, executablePath, "#!/usr/bin/env sh\nexit 0\n")
+	if err := os.Chmod(executablePath, 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink("target.txt", filepath.Join(workDir, "link.txt")); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := Save(tmpDir, saveDir); err != nil {
+		t.Fatalf("Save() error = %v", err)
+	}
+
+	target, err := os.Readlink(filepath.Join(saveDir, "link.txt"))
+	if err != nil {
+		t.Fatalf("saved link missing or not symlink: %v", err)
+	}
+	if target != "target.txt" {
+		t.Fatalf("saved link target = %q want target.txt", target)
+	}
+
+	info, err := os.Stat(filepath.Join(saveDir, "run.sh"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := info.Mode().Perm(); got != 0755 {
+		t.Fatalf("saved executable mode = %o want 755", got)
+	}
+	if _, err := os.Stat(filepath.Join(saveDir, "..metadata")); err != nil {
+		t.Fatalf("valid leading-dot file was not saved: %v", err)
+	}
+	dirInfo, err := os.Stat(filepath.Join(saveDir, "private"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := dirInfo.Mode().Perm(); got != 0700 {
+		t.Fatalf("saved directory mode = %o want 700", got)
+	}
+}
+
+func writeFile(t *testing.T, path string, contents string) {
+	t.Helper()
+	if err := os.WriteFile(path, []byte(contents), 0644); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func runGit(t *testing.T, dir string, args ...string) {
+	t.Helper()
+	cmd := exec.Command("git", args...)
+	cmd.Dir = dir
+	if output, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("git %v failed: %v\n%s", args, err, output)
+	}
+}
+
+func runGitOutput(t *testing.T, dir string, args ...string) string {
+	t.Helper()
+	cmd := exec.Command("git", args...)
+	cmd.Dir = dir
+	output, err := cmd.Output()
+	if err != nil {
+		t.Fatalf("git %v failed: %v", args, err)
+	}
+	return string(output)
+}
