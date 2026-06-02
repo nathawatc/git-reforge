@@ -1,4 +1,4 @@
-package main
+package migration_test
 
 import (
 	"os"
@@ -7,11 +7,8 @@ import (
 	"strings"
 	"testing"
 
-	"github-to-codeberg/pkg/coauthor"
 	"github-to-codeberg/pkg/config"
-	"github-to-codeberg/pkg/git"
-	"github-to-codeberg/pkg/rewrite"
-	"github-to-codeberg/pkg/signing"
+	"github-to-codeberg/pkg/migration"
 )
 
 type pipelineTestLogger struct{}
@@ -71,29 +68,12 @@ func TestNonInteractiveMigrationPipelineLocalRepos(t *testing.T) {
 	cfg.SaveDir = saveDir
 	cfg.Logger = pipelineTestLogger{}
 
-	if err := git.Clone(cfg); err != nil {
-		t.Fatalf("Clone() error = %v", err)
+	if err := migration.Run(cfg); err != nil {
+		t.Fatalf("Run() error = %v", err)
 	}
-	tempDir := cfg.TempDir
-	t.Cleanup(func() {
-		if err := os.RemoveAll(tempDir); err != nil {
-			t.Errorf("failed to remove temp dir %s: %v", tempDir, err)
-		}
-	})
-	if err := rewrite.RewriteCommitsBatch(cfg); err != nil {
-		t.Fatalf("RewriteCommitsBatch() error = %v", err)
-	}
-	if err := coauthor.RunCoauthorPhase(cfg); err != nil {
-		t.Fatalf("RunCoauthorPhase() error = %v", err)
-	}
-	if err := signing.HandleSigning(cfg); err != nil {
-		t.Fatalf("HandleSigning() error = %v", err)
-	}
-	if err := git.Save(cfg.TempDir, cfg.SaveDir); err != nil {
-		t.Fatalf("Save() error = %v", err)
-	}
-	if err := git.Push(cfg); err != nil {
-		t.Fatalf("Push() error = %v", err)
+
+	if _, err := os.Stat(cfg.TempDir); !os.IsNotExist(err) {
+		t.Fatalf("temp dir %q still exists: %v", cfg.TempDir, err)
 	}
 
 	cloneDir := filepath.Join(root, "dest-clone")
