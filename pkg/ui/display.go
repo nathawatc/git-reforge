@@ -69,11 +69,9 @@ func DisplayConfig(cfg *config.Config) {
 		fmt.Println()
 	}
 
-	fmt.Print("Proceed with migration? [y/N] ")
-	var reply string
-	if _, err := fmt.Scanln(&reply); err != nil {
-		reply = ""
-	}
+	prompts := NewPromptSession()
+	defer prompts.Close()
+	reply := prompts.ReadLine("Proceed with migration? [y/N] ")
 	if !strings.EqualFold(strings.TrimSpace(reply), "Y") {
 		log.Info("Migration cancelled")
 		os.Exit(0)

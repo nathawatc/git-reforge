@@ -1,9 +1,7 @@
 package ui
 
 import (
-	"bufio"
 	"fmt"
-	"os"
 	"os/exec"
 	"strings"
 
@@ -142,7 +140,8 @@ func getCommitDetails(tmpDir string, hash string) (authorName, authorEmail, auth
 
 func promptCommitChoice(commitHash string, remainingCommits []string, hasOverride bool, cfg *config.Config) string {
 	hash := plumbing.NewHash(commitHash)
-	reader := bufio.NewReader(os.Stdin)
+	prompts := NewPromptSession()
+	defer prompts.Close()
 
 	for {
 		if hasOverride {
@@ -157,23 +156,17 @@ func promptCommitChoice(commitHash string, remainingCommits []string, hasOverrid
 		fmt.Printf("  %s[Q]uit%s - Stop and apply changes made so far\n", Red, NC)
 		fmt.Println()
 
-		fmt.Print("  Choice [E/A/M/S/D/Q]: ")
-		input, _ := reader.ReadString('\n')
-		choice := strings.TrimSpace(strings.ToUpper(input))
+		choice := strings.ToUpper(prompts.ReadLine("  Choice [E/A/M/S/D/Q]: "))
 
 		switch choice {
 		case "E":
 			fmt.Println()
-			fmt.Print("  New author name [" + cfg.NewName + "]: ")
-			input, _ := reader.ReadString('\n')
-			customName := strings.TrimSpace(input)
+			customName := prompts.ReadLine("  New author name [" + cfg.NewName + "]: ")
 			if customName == "" {
 				customName = cfg.NewName
 			}
 
-			fmt.Print("  New author email [" + cfg.NewEmail + "]: ")
-			input, _ = reader.ReadString('\n')
-			customEmail := strings.TrimSpace(input)
+			customEmail := prompts.ReadLine("  New author email [" + cfg.NewEmail + "]: ")
 			if customEmail == "" {
 				customEmail = cfg.NewEmail
 			}
@@ -191,8 +184,7 @@ func promptCommitChoice(commitHash string, remainingCommits []string, hasOverrid
 			fmt.Printf("    %s\n", getCommitSubject(cfg.TempDir, commitHash))
 			fmt.Println()
 			fmt.Printf("  %sEnter new commit message (or press Enter to keep current):%s\n", Cyan, NC)
-			input, _ := reader.ReadString('\n')
-			customMessage := strings.TrimSpace(input)
+			customMessage := prompts.ReadLine("")
 			if customMessage != "" {
 				cfg.State.CommitMessages[hash] = customMessage
 				cfg.Logger.Success("Custom message saved for commit " + commitHash[:12])
