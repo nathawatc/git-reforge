@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"maps"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -374,11 +375,7 @@ func branchRefspecs(workDir string) ([]string, error) {
 		refspecsByBranch[branchName] = ref + ":refs/heads/" + branchName
 	}
 
-	var branchNames []string
-	for branchName := range refspecsByBranch {
-		branchNames = append(branchNames, branchName)
-	}
-	slices.Sort(branchNames)
+	branchNames := slices.Sorted(maps.Keys(refspecsByBranch))
 
 	var refspecs []string
 	for _, branchName := range branchNames {

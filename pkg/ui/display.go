@@ -24,8 +24,8 @@ func DisplayConfig(cfg *config.Config) {
 		fmt.Printf("  %sOld Author:%s    %s\n", Bold, NC, cfg.OldNames[0])
 	} else {
 		fmt.Printf("  %sOld Authors:%s   %s\n", Bold, NC, cfg.OldNames[0])
-		for i := 1; i < len(cfg.OldNames); i++ {
-			fmt.Printf("                 %s\n", cfg.OldNames[i])
+		for _, oldName := range cfg.OldNames[1:] {
+			fmt.Printf("                 %s\n", oldName)
 		}
 	}
 	fmt.Printf("  %sNew Author:%s    %s\n", Bold, NC, cfg.NewName)

@@ -3,6 +3,7 @@ package ui
 import (
 	"fmt"
 	"os/exec"
+	"regexp"
 	"strings"
 
 	"github.com/go-git/go-git/v5/plumbing"
@@ -84,14 +85,7 @@ func InteractiveEdit(cfg *config.Config) {
 }
 
 func getCommitsByAuthor(tmpDir string, authorName string) []string {
-	// Escape regex metacharacters
-	escaped := authorName
-	re := strings.NewReplacer(
-		"[", "\\[", "]", "\\]", "\\", "\\\\", ".", "\\.", "^", "\\^",
-		"$", "\\$", "*", "\\*", "+", "\\+", "?", "\\?", "(", "\\(",
-		")", "\\)", "|", "\\|", "{", "\\{", "}", "\\}",
-	)
-	escaped = re.Replace(escaped)
+	escaped := regexp.QuoteMeta(authorName)
 
 	cmd := exec.Command("git", "log", "--all", "--format=%H", "--author="+escaped)
 	cmd.Dir = tmpDir + "/working"
@@ -229,9 +223,7 @@ func promptCommitChoice(commitHash string, remainingCommits []string, hasOverrid
 			return "next"
 		case "D":
 			cfg.Logger.Info("Applying default changes to all remaining commits...")
-			clone := make([]string, len(remainingCommits))
-			copy(clone, remainingCommits)
-			for _, remainingHash := range clone {
+			for _, remainingHash := range remainingCommits {
 				h := plumbing.NewHash(remainingHash)
 				cfg.State.CommitOverrides[h] = config.CommitOverride{
 					Name:  cfg.NewName,
