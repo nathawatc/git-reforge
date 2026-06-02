@@ -4,18 +4,12 @@ import (
 	"context"
 	"fmt"
 	"os"
-	"os/exec"
-	"slices"
-	"strings"
 
 	"github.com/urfave/cli/v3"
 
-	"github-to-codeberg/pkg/coauthor"
 	"github-to-codeberg/pkg/config"
-	"github-to-codeberg/pkg/git"
 	"github-to-codeberg/pkg/logging"
-	"github-to-codeberg/pkg/rewrite"
-	"github-to-codeberg/pkg/signing"
+	"github-to-codeberg/pkg/migration"
 	"github-to-codeberg/pkg/ui"
 )
 
@@ -48,7 +42,7 @@ func main() {
 				Aliases: []string{"e"},
 				Usage:   "New author email",
 			},
-			&cli.StringFlag{
+			&cli.StringSliceFlag{
 				Name:    "old-name",
 				Aliases: []string{"o"},
 				Usage:   "Old author name(s) to replace",
@@ -124,70 +118,25 @@ func main() {
 				cfg.SignMode = "none"
 			}
 
-			oldNameStr := c.String("old-name")
-			if oldNameStr != "" {
-				parts := splitOldNames(oldNameStr)
-				cfg.OldNames = append(cfg.OldNames, parts...)
-			}
+			cfg.OldNames = config.ParseOldNames(c.StringSlice("old-name"))
 
-			if err := validateArgs(cfg); err != nil {
+			if err := config.Validate(cfg); err != nil {
 				log.Error(err.Error())
 				return err
 			}
 
-			checkDependencies(cfg)
+			log.Info("Checking dependencies...")
+			if err := config.CheckDependencies(cfg); err != nil {
+				log.Error(err.Error())
+				return err
+			}
+			log.Success("All dependencies satisfied")
+
 			ui.DisplayConfig(cfg)
 
-			if err := git.Clone(cfg); err != nil {
+			if err := migration.Run(cfg); err != nil {
 				log.Error(err.Error())
 				return err
-			}
-
-			if cfg.Interactive {
-				ui.InteractiveEdit(cfg)
-				if err := rewrite.RewriteCommitsInteractive(cfg); err != nil {
-					log.Error(err.Error())
-					return err
-				}
-			} else {
-				if err := rewrite.RewriteCommitsBatch(cfg); err != nil {
-					log.Error(err.Error())
-					return err
-				}
-			}
-
-			if err := coauthor.RunCoauthorPhase(cfg); err != nil {
-				log.Error(err.Error())
-				return err
-			}
-
-			if err := signing.HandleSigning(cfg); err != nil {
-				log.Error(err.Error())
-				return err
-			}
-
-			if cfg.SaveDir != "" {
-				if err := git.Save(cfg.TempDir, cfg.SaveDir); err != nil {
-					log.Error(err.Error())
-					return err
-				}
-			}
-
-			if !cfg.NoPush {
-				if err := git.Push(cfg.TempDir, cfg.DestURL); err != nil {
-					log.Error(err.Error())
-					return err
-				}
-			} else {
-				log.Info("Skipping push to Codeberg")
-			}
-
-			ui.ShowSummary(cfg)
-
-			if cfg.TempDir != "" {
-				if err := os.RemoveAll(cfg.TempDir); err != nil {
-					log.Warning("Failed to clean up temp directory: " + cfg.TempDir)
-				}
 			}
 
 			return nil
@@ -195,98 +144,7 @@ func main() {
 	}
 
 	if err := cmd.Run(context.Background(), os.Args); err != nil {
-		fmt.Fprintln(os.Stderr, err)
+		_, _ = fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}
-}
-
-func validateArgs(cfg *config.Config) error {
-	if cfg.SourceURL == "" {
-		return fmt.Errorf("source URL is required (-s, --source)")
-	}
-
-	if cfg.DestURL == "" && !cfg.NoPush && cfg.SaveDir == "" {
-		return fmt.Errorf("destination URL is required (-d, --dest) unless --no-push or --save-dir is given")
-	}
-
-	if cfg.NewEmail == "" {
-		return fmt.Errorf("new email is required (-e, --new-email)")
-	}
-
-	if len(cfg.OldNames) == 0 {
-		return fmt.Errorf("at least one old author name is required (-o, --old-name)")
-	}
-
-	if slices.Contains(cfg.OldNames, "") {
-		return fmt.Errorf("empty string is not a valid old author name (-o, --old-name)")
-	}
-
-	if cfg.SignMode == "gpg" && cfg.GPGKey == "" {
-		return fmt.Errorf("GPG key is required when using --sign-mode=gpg (--gpg-key)")
-	}
-
-	if cfg.SignMode == "ssh" && cfg.SSHKey == "" {
-		return fmt.Errorf("SSH key path is required when using --sign-mode=ssh (--ssh-key)")
-	}
-
-	if cfg.SaveDir != "" {
-		if _, err := os.Stat(cfg.SaveDir); err == nil {
-			return fmt.Errorf("save directory already exists: %s", cfg.SaveDir)
-		}
-	}
-
-	if cfg.CoauthorMode != "" {
-		if cfg.CoauthorOldName == "" && len(cfg.OldNames) > 0 {
-			cfg.CoauthorOldName = cfg.OldNames[0]
-		}
-		if cfg.CoauthorNewName == "" {
-			cfg.CoauthorNewName = cfg.NewName
-		}
-		if cfg.CoauthorNewEmail == "" {
-			cfg.CoauthorNewEmail = cfg.NewEmail
-		}
-	}
-
-	if cfg.SignMode == "" {
-		cfg.SignMode = "keep"
-	}
-
-	return nil
-}
-
-func checkDependencies(cfg *config.Config) {
-	log := cfg.Logger
-	log.Info("Checking dependencies...")
-
-	if _, err := exec.LookPath("git"); err != nil {
-		log.Error("git is not installed")
-		os.Exit(1)
-	}
-
-	if cfg.SignMode == "gpg" {
-		if err := exec.Command("gpg", "--list-secret-keys", cfg.GPGKey).Run(); err != nil {
-			log.Error("GPG key not found: " + cfg.GPGKey)
-			os.Exit(1)
-		}
-	}
-
-	if cfg.SignMode == "ssh" {
-		if _, err := os.Stat(cfg.SSHKey); os.IsNotExist(err) {
-			log.Error("SSH key file not found: " + cfg.SSHKey)
-			os.Exit(1)
-		}
-	}
-
-	log.Success("All dependencies satisfied")
-}
-
-func splitOldNames(s string) []string {
-	var names []string
-	for part := range strings.SplitSeq(s, ",") {
-		trimmed := strings.TrimSpace(part)
-		if trimmed != "" {
-			names = append(names, trimmed)
-		}
-	}
-	return names
 }

@@ -11,6 +11,17 @@ import (
 	"github-to-codeberg/pkg/shell"
 )
 
+func runCommand(cmd *exec.Cmd, description string) error {
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		if len(output) > 0 {
+			return fmt.Errorf("%s failed: %w\n%s", description, err, output)
+		}
+		return fmt.Errorf("%s failed: %w", description, err)
+	}
+	return nil
+}
+
 func RewriteCommitsBatch(cfg *config.Config) error {
 	log := cfg.Logger
 	log.Header("Rewriting Commit History")
@@ -29,24 +40,27 @@ func RewriteCommitsBatch(cfg *config.Config) error {
 	// Build the filter script
 	var script strings.Builder
 	script.WriteString(`#!/usr/bin/env bash
+OLD_NAMES_ARRAY=(
 `)
 	for _, name := range cfg.OldNames {
-		fmt.Fprintf(&script, "echo %q\n", name)
+		fmt.Fprintf(&script, "    %s\n", shell.QuoteSingle(name))
 	}
-	script.WriteString(` | while IFS= read -r old_name; do
-    if [ "$GIT_AUTHOR_NAME" = "$old_name" ]; then
-        export GIT_AUTHOR_NAME="` + shell.EscapeShell(cfg.NewName) + `"
-        export GIT_AUTHOR_EMAIL="` + shell.EscapeShell(cfg.NewEmail) + `"
-        break
-    fi
+	script.WriteString(`)
+
+for old_name in "${OLD_NAMES_ARRAY[@]}"; do
+	if [ "$GIT_AUTHOR_NAME" = "$old_name" ]; then
+		export GIT_AUTHOR_NAME="$FILTER_NEW_NAME"
+		export GIT_AUTHOR_EMAIL="$FILTER_NEW_EMAIL"
+		break
+	fi
 done
 
-echo "` + shell.EscapeShell(strings.Join(cfg.OldNames, "\n")) + `" | while IFS= read -r old_name; do
-    if [ "$GIT_COMMITTER_NAME" = "$old_name" ]; then
-        export GIT_COMMITTER_NAME="` + shell.EscapeShell(cfg.NewName) + `"
-        export GIT_COMMITTER_EMAIL="` + shell.EscapeShell(cfg.NewEmail) + `"
-        break
-    fi
+for old_name in "${OLD_NAMES_ARRAY[@]}"; do
+	if [ "$GIT_COMMITTER_NAME" = "$old_name" ]; then
+		export GIT_COMMITTER_NAME="$FILTER_NEW_NAME"
+		export GIT_COMMITTER_EMAIL="$FILTER_NEW_EMAIL"
+		break
+	fi
 done
 `)
 
@@ -60,8 +74,8 @@ done
 		"FILTER_NEW_NAME="+cfg.NewName,
 		"FILTER_NEW_EMAIL="+cfg.NewEmail,
 	)
-	if err := cmd.Run(); err != nil {
-		return fmt.Errorf("filter-branch failed: %w", err)
+	if err := runCommand(cmd, "filter-branch"); err != nil {
+		return err
 	}
 
 	log.Success("Commit history rewritten successfully")
@@ -109,8 +123,8 @@ func RewriteCommitsInteractive(cfg *config.Config) error {
 
 	cmd := exec.Command(args[0], args[1:]...)
 	cmd.Dir = cfg.WorkDir()
-	if err := cmd.Run(); err != nil {
-		return fmt.Errorf("filter-branch failed: %w", err)
+	if err := runCommand(cmd, "filter-branch"); err != nil {
+		return err
 	}
 
 	log.Success("Commit history rewritten successfully")
@@ -127,10 +141,10 @@ func generateInteractiveFilter(cfg *config.Config) (string, error) {
 			fmt.Fprintf(&script, "    %s)\n        ;;\n", hash.String())
 		} else {
 			fmt.Fprintf(&script, "    %s)\n", hash.String())
-			fmt.Fprintf(&script, "        export GIT_AUTHOR_NAME=\"%s\"\n", shell.EscapeShell(override.Name))
-			fmt.Fprintf(&script, "        export GIT_AUTHOR_EMAIL=\"%s\"\n", shell.EscapeShell(override.Email))
-			fmt.Fprintf(&script, "        export GIT_COMMITTER_NAME=\"%s\"\n", shell.EscapeShell(override.Name))
-			fmt.Fprintf(&script, "        export GIT_COMMITTER_EMAIL=\"%s\"\n", shell.EscapeShell(override.Email))
+			fmt.Fprintf(&script, "        export GIT_AUTHOR_NAME=\"%s\"\n", shell.EscapeDoubleQuoted(override.Name))
+			fmt.Fprintf(&script, "        export GIT_AUTHOR_EMAIL=\"%s\"\n", shell.EscapeDoubleQuoted(override.Email))
+			fmt.Fprintf(&script, "        export GIT_COMMITTER_NAME=\"%s\"\n", shell.EscapeDoubleQuoted(override.Name))
+			fmt.Fprintf(&script, "        export GIT_COMMITTER_EMAIL=\"%s\"\n", shell.EscapeDoubleQuoted(override.Email))
 			script.WriteString("        ;;\n")
 		}
 	}

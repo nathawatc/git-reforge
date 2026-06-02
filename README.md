@@ -54,18 +54,18 @@ go build .
 
 ### Optional Options
 
-| Option                  | Description                                                 |
-| ----------------------- | ----------------------------------------------------------- |
-| `-n, --new-name <name>` | New author name                                             |
-| `-o, --old-name <name>` | Old author name(s) to replace (can be comma-separated)      |
-| `-i, --interactive`     | Enable interactive mode for per-commit editing              |
-| `--sign-mode <mode>`    | Signing mode: `keep\|gpg\|ssh\|none` (default: `keep`)      |
-| `--gpg-key <keyid>`     | GPG key ID for re-signing (required if `--sign-mode=gpg`)   |
-| `--ssh-key <path>`      | SSH key path for re-signing (required if `--sign-mode=ssh`) |
-| `--nosign`              | Shorthand for `--sign-mode=none`                            |
-| `--save-dir <path>`     | Save rewritten repo to `<path>` (directory must not exist)  |
-| `--no-push`             | Rewrite history locally but skip pushing to Codeberg        |
-| `-h, --help`            | Show help message                                           |
+| Option                  | Description                                                   |
+| ----------------------- | ------------------------------------------------------------- |
+| `-n, --new-name <name>` | New author name                                               |
+| `-o, --old-name <name>` | Old author name(s) to replace (repeatable or comma-separated) |
+| `-i, --interactive`     | Enable interactive mode for per-commit editing                |
+| `--sign-mode <mode>`    | Signing mode: `keep\|gpg\|ssh\|none` (default: `keep`)        |
+| `--gpg-key <keyid>`     | GPG key ID for re-signing (required if `--sign-mode=gpg`)     |
+| `--ssh-key <path>`      | SSH key path for re-signing (required if `--sign-mode=ssh`)   |
+| `--nosign`              | Shorthand for `--sign-mode=none`                              |
+| `--save-dir <path>`     | Save rewritten repo to `<path>` (directory must not exist)    |
+| `--no-push`             | Rewrite history locally but skip pushing to Codeberg          |
+| `-h, --help`            | Show help message                                             |
 
 ### Co-Authored-by Options
 
@@ -116,7 +116,7 @@ go build .
 ```bash
 ./github-to-codeberg -s https://github.com/user/repo.git \
 -d https://codeberg.org/user/repo.git \
--o "OldName1,OldName2" \
+-o "OldName1" -o "OldName2" \
 -n "NewName" \
 -e newuser@noreply.codeberg.org
 ```
@@ -193,12 +193,14 @@ When using `-i` flag, you can review each commit and choose:
 
 With `--coauthor-mode interactive`, you can review each affected commit:
 
-| Key | Action                                  |
-| --- | --------------------------------------- |
-| `R` | Rewrite the trailer with the new values |
-| `D` | Delete (remove) the trailer             |
-| `S` | Skip (keep original trailer)            |
-| `Q` | Quit and apply decisions made so far    |
+| Key  | Action                                   |
+| ---- | ---------------------------------------- |
+| `R`  | Rewrite the trailer with the new values  |
+| `D`  | Delete (remove) the trailer              |
+| `S`  | Skip (keep original trailer)             |
+| `RA` | Rewrite all remaining commits            |
+| `DA` | Delete trailers in all remaining commits |
+| `Q`  | Quit and apply decisions made so far     |
 
 > [!NOTE]
 >

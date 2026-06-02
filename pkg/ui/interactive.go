@@ -1,10 +1,9 @@
 package ui
 
 import (
-	"bufio"
 	"fmt"
-	"os"
 	"os/exec"
+	"regexp"
 	"strings"
 
 	"github.com/go-git/go-git/v5/plumbing"
@@ -18,10 +17,10 @@ func InteractiveEdit(cfg *config.Config) {
 
 	log.Info("Fetching commits from author(s): " + strings.Join(cfg.OldNames, ", "))
 
-	// Get all commits by old authors
+	// Get all commits by old authors or committers
 	var commits []string
 	for _, oldName := range cfg.OldNames {
-		commits = append(commits, getCommitsByAuthor(cfg.TempDir, oldName)...)
+		commits = append(commits, getCommitsByIdentity(cfg.TempDir, oldName)...)
 	}
 
 	// Remove duplicates
@@ -85,17 +84,17 @@ func InteractiveEdit(cfg *config.Config) {
 	}
 }
 
-func getCommitsByAuthor(tmpDir string, authorName string) []string {
-	// Escape regex metacharacters
-	escaped := authorName
-	re := strings.NewReplacer(
-		"[", "\\[", "]", "\\]", "\\", "\\\\", ".", "\\.", "^", "\\^",
-		"$", "\\$", "*", "\\*", "+", "\\+", "?", "\\?", "(", "\\(",
-		")", "\\)", "|", "\\|", "{", "\\{", "}", "\\}",
-	)
-	escaped = re.Replace(escaped)
+func getCommitsByIdentity(tmpDir string, name string) []string {
+	escaped := regexp.QuoteMeta(name)
 
-	cmd := exec.Command("git", "log", "--all", "--format=%H", "--author="+escaped)
+	var commits []string
+	commits = append(commits, getCommitsByLogFilter(tmpDir, "--author="+escaped)...)
+	commits = append(commits, getCommitsByLogFilter(tmpDir, "--committer="+escaped)...)
+	return uniqueList(commits)
+}
+
+func getCommitsByLogFilter(tmpDir string, filter string) []string {
+	cmd := exec.Command("git", "log", "--all", "--format=%H", filter)
 	cmd.Dir = tmpDir + "/working"
 	output, err := cmd.Output()
 	if err != nil {
@@ -142,7 +141,12 @@ func getCommitDetails(tmpDir string, hash string) (authorName, authorEmail, auth
 
 func promptCommitChoice(commitHash string, remainingCommits []string, hasOverride bool, cfg *config.Config) string {
 	hash := plumbing.NewHash(commitHash)
-	reader := bufio.NewReader(os.Stdin)
+	prompts := NewPromptSession()
+	defer func() {
+		if err := prompts.Close(); err != nil {
+			cfg.Logger.Warning(err.Error())
+		}
+	}()
 
 	for {
 		if hasOverride {
@@ -157,23 +161,30 @@ func promptCommitChoice(commitHash string, remainingCommits []string, hasOverrid
 		fmt.Printf("  %s[Q]uit%s - Stop and apply changes made so far\n", Red, NC)
 		fmt.Println()
 
-		fmt.Print("  Choice [E/A/M/S/D/Q]: ")
-		input, _ := reader.ReadString('\n')
-		choice := strings.TrimSpace(strings.ToUpper(input))
+		choice, err := prompts.ReadLine("  Choice [E/A/M/S/D/Q]: ")
+		if err != nil {
+			cfg.Logger.Warning("Failed to read interactive choice: " + err.Error())
+			return "quit"
+		}
+		choice = strings.ToUpper(choice)
 
 		switch choice {
 		case "E":
 			fmt.Println()
-			fmt.Print("  New author name [" + cfg.NewName + "]: ")
-			input, _ := reader.ReadString('\n')
-			customName := strings.TrimSpace(input)
+			customName, err := prompts.ReadLine("  New author name [" + cfg.NewName + "]: ")
+			if err != nil {
+				cfg.Logger.Warning("Failed to read author name: " + err.Error())
+				return "quit"
+			}
 			if customName == "" {
 				customName = cfg.NewName
 			}
 
-			fmt.Print("  New author email [" + cfg.NewEmail + "]: ")
-			input, _ = reader.ReadString('\n')
-			customEmail := strings.TrimSpace(input)
+			customEmail, err := prompts.ReadLine("  New author email [" + cfg.NewEmail + "]: ")
+			if err != nil {
+				cfg.Logger.Warning("Failed to read author email: " + err.Error())
+				return "quit"
+			}
 			if customEmail == "" {
 				customEmail = cfg.NewEmail
 			}
@@ -191,8 +202,11 @@ func promptCommitChoice(commitHash string, remainingCommits []string, hasOverrid
 			fmt.Printf("    %s\n", getCommitSubject(cfg.TempDir, commitHash))
 			fmt.Println()
 			fmt.Printf("  %sEnter new commit message (or press Enter to keep current):%s\n", Cyan, NC)
-			input, _ := reader.ReadString('\n')
-			customMessage := strings.TrimSpace(input)
+			customMessage, err := prompts.ReadLine("")
+			if err != nil {
+				cfg.Logger.Warning("Failed to read commit message: " + err.Error())
+				return "quit"
+			}
 			if customMessage != "" {
 				cfg.State.CommitMessages[hash] = customMessage
 				cfg.Logger.Success("Custom message saved for commit " + commitHash[:12])
@@ -216,9 +230,7 @@ func promptCommitChoice(commitHash string, remainingCommits []string, hasOverrid
 			return "next"
 		case "D":
 			cfg.Logger.Info("Applying default changes to all remaining commits...")
-			clone := make([]string, len(remainingCommits))
-			copy(clone, remainingCommits)
-			for _, remainingHash := range clone {
+			for _, remainingHash := range remainingCommits {
 				h := plumbing.NewHash(remainingHash)
 				cfg.State.CommitOverrides[h] = config.CommitOverride{
 					Name:  cfg.NewName,

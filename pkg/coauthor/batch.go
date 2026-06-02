@@ -88,15 +88,15 @@ func buildCoauthorMsgFilter(cfg *config.Config, outputPath string, modeType stri
 		sedMatchPattern = "Co-authored-by: " + sedEscapedName + " <[^>]*>"
 	}
 
-	sedEscapedNewName := shell.EscapeSed(cfg.CoauthorNewName)
-	sedEscapedNewEmail := shell.EscapeSed(cfg.CoauthorNewEmail)
+	sedEscapedNewName := shell.EscapeSedReplacement(cfg.CoauthorNewName)
+	sedEscapedNewEmail := shell.EscapeSedReplacement(cfg.CoauthorNewEmail)
 	newTrailer := "Co-authored-by: " + sedEscapedNewName + " <" + sedEscapedNewEmail + ">"
 
 	if modeType == "batch" {
 		if cfg.CoauthorMode == "remove" {
-			fmt.Fprintf(&script, "printf '%%s' \"$input\" | sed -E '/^%s$/d'\n", sedMatchPattern)
+			fmt.Fprintf(&script, "printf '%%s' \"$input\" | sed -E %s\n", shell.QuoteSingle(fmt.Sprintf("/^%s$/d", sedMatchPattern)))
 		} else {
-			fmt.Fprintf(&script, "printf '%%s' \"$input\" | sed -E 's/^%s$/%s/'\n", sedMatchPattern, newTrailer)
+			fmt.Fprintf(&script, "printf '%%s' \"$input\" | sed -E %s\n", shell.QuoteSingle(fmt.Sprintf("s/^%s$/%s/", sedMatchPattern, newTrailer)))
 		}
 	} else {
 		script.WriteString("case \"$GIT_COMMIT\" in\n")
@@ -104,11 +104,11 @@ func buildCoauthorMsgFilter(cfg *config.Config, outputPath string, modeType stri
 			switch action {
 			case "remove":
 				fmt.Fprintf(&script, "    %s)\n", hash.String())
-				fmt.Fprintf(&script, "        printf '%%s' \"$input\" | sed -E '/^%s$/d'\n", sedMatchPattern)
+				fmt.Fprintf(&script, "        printf '%%s' \"$input\" | sed -E %s\n", shell.QuoteSingle(fmt.Sprintf("/^%s$/d", sedMatchPattern)))
 				script.WriteString("        ;;\n")
 			case "rewrite":
 				fmt.Fprintf(&script, "    %s)\n", hash.String())
-				fmt.Fprintf(&script, "        printf '%%s' \"$input\" | sed -E 's/^%s$/%s/'\n", sedMatchPattern, newTrailer)
+				fmt.Fprintf(&script, "        printf '%%s' \"$input\" | sed -E %s\n", shell.QuoteSingle(fmt.Sprintf("s/^%s$/%s/", sedMatchPattern, newTrailer)))
 				script.WriteString("        ;;\n")
 			default:
 				fmt.Fprintf(&script, "    %s)\n", hash.String())
@@ -202,7 +202,7 @@ func InteractiveCoauthorEdit(cfg *config.Config) {
 			fmt.Println()
 		}
 
-		choice := promptLoop(commitHash, cfg)
+		choice := promptLoop(commitHash, matchingCommits[current-1:], cfg)
 		if choice == "quit" {
 			return
 		}
@@ -278,7 +278,14 @@ func extractMatchingLines(body string, name string, email string) []string {
 	return matches
 }
 
-func promptLoop(commitHash string, cfg *config.Config) string {
+func promptLoop(commitHash string, remainingCommits []string, cfg *config.Config) string {
+	prompts := ui.NewPromptSession()
+	defer func() {
+		if err := prompts.Close(); err != nil {
+			cfg.Logger.Warning(err.Error())
+		}
+	}()
+
 	for {
 		fmt.Printf("  %s[R]ewrite%s - Replace trailer with new Co-authored-by\n", ui.Green, ui.NC)
 		fmt.Printf("  %s[D]elete%s  - Remove the matching trailer line(s)\n", ui.Red, ui.NC)
@@ -288,10 +295,10 @@ func promptLoop(commitHash string, cfg *config.Config) string {
 		fmt.Printf("  %s[Q]uit%s   - Stop and apply decisions made so far\n", ui.Red, ui.NC)
 		fmt.Println()
 
-		var choice string
-		fmt.Print("  Choice [R/D/S/RA/DA/Q]: ")
-		if _, err := fmt.Scanln(&choice); err != nil {
-			choice = ""
+		choice, err := prompts.ReadLine("  Choice [R/D/S/RA/DA/Q]: ")
+		if err != nil {
+			cfg.Logger.Warning("Failed to read coauthor choice: " + err.Error())
+			return "quit"
 		}
 
 		hash := plumbing.NewHash(commitHash)
@@ -310,11 +317,11 @@ func promptLoop(commitHash string, cfg *config.Config) string {
 			cfg.Logger.Info("Commit " + commitHash[:12] + " will be left unchanged")
 			return ""
 		case "RA":
-			cfg.State.CoauthorActions[hash] = "rewrite"
+			applyCoauthorAction(remainingCommits, "rewrite", cfg)
 			cfg.Logger.Info("Will rewrite Co-authored-by trailers in all remaining commits")
 			return "quit"
 		case "DA":
-			cfg.State.CoauthorActions[hash] = "remove"
+			applyCoauthorAction(remainingCommits, "remove", cfg)
 			cfg.Logger.Info("Will remove Co-authored-by trailers from all remaining commits")
 			return "quit"
 		case "Q":
@@ -323,5 +330,14 @@ func promptLoop(commitHash string, cfg *config.Config) string {
 		default:
 			cfg.Logger.Warning("Invalid choice. Please select R, D, S, RA, DA, or Q.")
 		}
+	}
+}
+
+func applyCoauthorAction(commitHashes []string, action string, cfg *config.Config) {
+	for _, commitHash := range commitHashes {
+		if commitHash == "" {
+			continue
+		}
+		cfg.State.CoauthorActions[plumbing.NewHash(commitHash)] = action
 	}
 }

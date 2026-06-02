@@ -1,6 +1,7 @@
 package signing
 
 import (
+	"errors"
 	"fmt"
 	"os/exec"
 	"strings"
@@ -8,6 +9,17 @@ import (
 	"github-to-codeberg/pkg/config"
 	"github-to-codeberg/pkg/shell"
 )
+
+func runCommand(cmd *exec.Cmd, description string) error {
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		if len(output) > 0 {
+			return fmt.Errorf("%s failed: %w\n%s", description, err, output)
+		}
+		return fmt.Errorf("%s failed: %w", description, err)
+	}
+	return nil
+}
 
 func HandleSigning(cfg *config.Config) error {
 	log := cfg.Logger
@@ -36,8 +48,8 @@ func handleNone(cfg *config.Config) error {
 	// Disable signing locally
 	cmd := exec.Command("git", "config", "gpg.sign", "false")
 	cmd.Dir = cfg.WorkDir()
-	if err := cmd.Run(); err != nil {
-		return fmt.Errorf("git config gpg.sign failed: %w", err)
+	if err := runCommand(cmd, "git config gpg.sign"); err != nil {
+		return err
 	}
 
 	// Run filter-branch to recreate commits without signatures.
@@ -48,16 +60,14 @@ func handleNone(cfg *config.Config) error {
 export GIT_COMMITTER_DATE="$GIT_COMMITTER_DATE"
 `, "--tag-name-filter", "cat", "--", "--all")
 	cmd.Dir = cfg.WorkDir()
-	if err := cmd.Run(); err != nil {
-		return fmt.Errorf("filter-branch failed: %w", err)
+	if err := runCommand(cmd, "filter-branch"); err != nil {
+		return err
 	}
 
 	// Unset config
 	cmd = exec.Command("git", "config", "--unset", "gpg.sign")
 	cmd.Dir = cfg.WorkDir()
-	if err := cmd.Run(); err != nil {
-		return fmt.Errorf("git config --unset failed: %w", err)
-	}
+	_ = cmd.Run()
 
 	log.Success("Signatures removed")
 	return ResignTags(cfg)
@@ -70,22 +80,30 @@ func handleGPG(cfg *config.Config) error {
 
 	cmd := exec.Command("git", "config", "user.signingkey", cfg.GPGKey)
 	cmd.Dir = cfg.WorkDir()
-	if err := cmd.Run(); err != nil {
-		return fmt.Errorf("git config user.signingkey failed: %w", err)
+	if err := runCommand(cmd, "git config user.signingkey"); err != nil {
+		return err
 	}
 
-	commitFilter := fmt.Sprintf(`git commit-tree -S"%s" "$@"`, shell.EscapeShell(cfg.GPGKey))
+	cmd = exec.Command("git", "config", "gpg.format", "openpgp")
+	cmd.Dir = cfg.WorkDir()
+	if err := runCommand(cmd, "git config gpg.format"); err != nil {
+		return err
+	}
+
+	commitFilter := fmt.Sprintf(`git -c gpg.format=openpgp commit-tree -S"%s" "$@"`, shell.EscapeDoubleQuoted(cfg.GPGKey))
 	cmd = exec.Command("git", "filter-branch", "-f", "--commit-filter", commitFilter, "--tag-name-filter", "cat", "--", "--all")
 	cmd.Dir = cfg.WorkDir()
-	if err := cmd.Run(); err != nil {
-		return fmt.Errorf("filter-branch failed: %w", err)
+	if err := runCommand(cmd, "filter-branch"); err != nil {
+		return err
 	}
 
 	cmd = exec.Command("git", "config", "--unset", "user.signingkey")
 	cmd.Dir = cfg.WorkDir()
-	if err := cmd.Run(); err != nil {
-		return fmt.Errorf("git config --unset user.signingkey failed: %w", err)
-	}
+	_ = cmd.Run()
+
+	cmd = exec.Command("git", "config", "--unset", "gpg.format")
+	cmd.Dir = cfg.WorkDir()
+	_ = cmd.Run()
 
 	log.Success("Commits re-signed with GPG")
 	return ResignTags(cfg)
@@ -98,33 +116,29 @@ func handleSSH(cfg *config.Config) error {
 
 	cmd := exec.Command("git", "config", "gpg.format", "ssh")
 	cmd.Dir = cfg.WorkDir()
-	if err := cmd.Run(); err != nil {
-		return fmt.Errorf("git config gpg.format failed: %w", err)
+	if err := runCommand(cmd, "git config gpg.format"); err != nil {
+		return err
 	}
 
 	cmd = exec.Command("git", "config", "user.signingkey", cfg.SSHKey)
 	cmd.Dir = cfg.WorkDir()
-	if err := cmd.Run(); err != nil {
-		return fmt.Errorf("git config user.signingkey failed: %w", err)
+	if err := runCommand(cmd, "git config user.signingkey"); err != nil {
+		return err
 	}
 
 	cmd = exec.Command("git", "filter-branch", "-f", "--commit-filter", `git commit-tree -S "$@"`, "--tag-name-filter", "cat", "--", "--all")
 	cmd.Dir = cfg.WorkDir()
-	if err := cmd.Run(); err != nil {
-		return fmt.Errorf("filter-branch failed: %w", err)
+	if err := runCommand(cmd, "filter-branch"); err != nil {
+		return err
 	}
 
 	cmd = exec.Command("git", "config", "--unset", "gpg.format")
 	cmd.Dir = cfg.WorkDir()
-	if err := cmd.Run(); err != nil {
-		return fmt.Errorf("git config --unset gpg.format failed: %w", err)
-	}
+	_ = cmd.Run()
 
 	cmd = exec.Command("git", "config", "--unset", "user.signingkey")
 	cmd.Dir = cfg.WorkDir()
-	if err := cmd.Run(); err != nil {
-		return fmt.Errorf("git config --unset user.signingkey failed: %w", err)
-	}
+	_ = cmd.Run()
 
 	log.Success("Commits re-signed with SSH")
 	return ResignTags(cfg)
@@ -167,32 +181,47 @@ func ResignTags(cfg *config.Config) error {
 	switch cfg.SignMode {
 	case "none":
 		log.Info("Stripping signatures from annotated tags...")
+		var failures []error
 		for _, tag := range annotatedTags {
 			if err := stripTag(cfg, tag); err != nil {
 				log.Warning("Failed to strip tag: " + tag)
+				failures = append(failures, fmt.Errorf("failed to strip tag %s: %w", tag, err))
 				continue
 			}
 			log.Info("  Stripped signature from tag: " + tag)
 		}
+		if err := errors.Join(failures...); err != nil {
+			return err
+		}
 		log.Success("Tag signatures removed")
 	case "gpg":
 		log.Info("Re-signing annotated tags with GPG key: " + cfg.GPGKey + "...")
+		var failures []error
 		for _, tag := range annotatedTags {
 			if err := resignTagGPG(cfg, tag); err != nil {
 				log.Warning("Failed to re-sign tag: " + tag)
+				failures = append(failures, fmt.Errorf("failed to re-sign GPG tag %s: %w", tag, err))
 				continue
 			}
 			log.Info("  Re-signed tag: " + tag)
 		}
+		if err := errors.Join(failures...); err != nil {
+			return err
+		}
 		log.Success("Tags re-signed with GPG")
 	case "ssh":
 		log.Info("Re-signing annotated tags with SSH key: " + cfg.SSHKey + "...")
+		var failures []error
 		for _, tag := range annotatedTags {
 			if err := resignTagSSH(cfg, tag); err != nil {
 				log.Warning("Failed to re-sign tag: " + tag)
+				failures = append(failures, fmt.Errorf("failed to re-sign SSH tag %s: %w", tag, err))
 				continue
 			}
 			log.Info("  Re-signed tag: " + tag)
+		}
+		if err := errors.Join(failures...); err != nil {
+			return err
 		}
 		log.Success("Tags re-signed with SSH")
 	}
@@ -207,7 +236,7 @@ func getTagMessage(tmpDir string, tagName string) (string, string, error) {
 	if err != nil {
 		return "", "", fmt.Errorf("git tag subject failed: %w", err)
 	}
-	subject := strings.TrimSpace(string(output))
+	subject := trimCommandTrailingNewlines(string(output))
 
 	cmd = exec.Command("git", "tag", "-l", "--format=%(contents:body)", tagName)
 	cmd.Dir = tmpDir + "/working"
@@ -215,9 +244,27 @@ func getTagMessage(tmpDir string, tagName string) (string, string, error) {
 	if err != nil {
 		return "", "", fmt.Errorf("git tag body failed: %w", err)
 	}
-	body := strings.TrimSpace(string(output))
+	body := trimCommandTrailingNewlines(string(output))
 
 	return subject, body, nil
+}
+
+func trimCommandTrailingNewlines(s string) string {
+	return strings.TrimRight(s, "\n")
+}
+
+func getTagRecreateMessage(tmpDir string, tagName string) (string, error) {
+	subject, body, err := getTagMessage(tmpDir, tagName)
+	if err != nil {
+		return "", err
+	}
+	if body == "" {
+		return subject, nil
+	}
+	if subject == "" {
+		return body, nil
+	}
+	return subject + "\n\n" + body, nil
 }
 
 func getTagCommit(tmpDir string, tagName string) (string, error) {
@@ -231,7 +278,7 @@ func getTagCommit(tmpDir string, tagName string) (string, error) {
 }
 
 func stripTag(cfg *config.Config, tagName string) error {
-	_, body, err := getTagMessage(cfg.TempDir, tagName)
+	msg, err := getTagRecreateMessage(cfg.TempDir, tagName)
 	if err != nil {
 		return err
 	}
@@ -240,7 +287,6 @@ func stripTag(cfg *config.Config, tagName string) error {
 		return err
 	}
 
-	msg := body
 	cmd := exec.Command("git", "tag", "-f", "-a", tagName, tagCommit, "-m", msg)
 	cmd.Dir = cfg.WorkDir()
 	if err := cmd.Run(); err != nil {
@@ -250,7 +296,7 @@ func stripTag(cfg *config.Config, tagName string) error {
 }
 
 func resignTagGPG(cfg *config.Config, tagName string) error {
-	_, body, err := getTagMessage(cfg.TempDir, tagName)
+	msg, err := getTagRecreateMessage(cfg.TempDir, tagName)
 	if err != nil {
 		return err
 	}
@@ -259,7 +305,9 @@ func resignTagGPG(cfg *config.Config, tagName string) error {
 		return err
 	}
 
-	cmd := exec.Command("git", "tag", "-f", "-s", tagName, "-u", cfg.GPGKey, tagCommit, "-m", body)
+	cmd := exec.Command("git",
+		"-c", "gpg.format=openpgp",
+		"tag", "-f", "-s", tagName, "-u", cfg.GPGKey, tagCommit, "-m", msg)
 	cmd.Dir = cfg.WorkDir()
 	if err := cmd.Run(); err != nil {
 		return fmt.Errorf("git tag resign GPG failed: %w", err)
@@ -268,7 +316,7 @@ func resignTagGPG(cfg *config.Config, tagName string) error {
 }
 
 func resignTagSSH(cfg *config.Config, tagName string) error {
-	_, body, err := getTagMessage(cfg.TempDir, tagName)
+	msg, err := getTagRecreateMessage(cfg.TempDir, tagName)
 	if err != nil {
 		return err
 	}
@@ -277,7 +325,10 @@ func resignTagSSH(cfg *config.Config, tagName string) error {
 		return err
 	}
 
-	cmd := exec.Command("git", "tag", "-f", "-s", tagName, tagCommit, "-m", body)
+	cmd := exec.Command("git",
+		"-c", "gpg.format=ssh",
+		"-c", "user.signingkey="+cfg.SSHKey,
+		"tag", "-f", "-s", tagName, tagCommit, "-m", msg)
 	cmd.Dir = cfg.WorkDir()
 	if err := cmd.Run(); err != nil {
 		return fmt.Errorf("git tag resign SSH failed: %w", err)

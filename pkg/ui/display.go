@@ -24,8 +24,8 @@ func DisplayConfig(cfg *config.Config) {
 		fmt.Printf("  %sOld Author:%s    %s\n", Bold, NC, cfg.OldNames[0])
 	} else {
 		fmt.Printf("  %sOld Authors:%s   %s\n", Bold, NC, cfg.OldNames[0])
-		for i := 1; i < len(cfg.OldNames); i++ {
-			fmt.Printf("                 %s\n", cfg.OldNames[i])
+		for _, oldName := range cfg.OldNames[1:] {
+			fmt.Printf("                 %s\n", oldName)
 		}
 	}
 	fmt.Printf("  %sNew Author:%s    %s\n", Bold, NC, cfg.NewName)
@@ -69,10 +69,17 @@ func DisplayConfig(cfg *config.Config) {
 		fmt.Println()
 	}
 
-	fmt.Print("Proceed with migration? [y/N] ")
-	var reply string
-	if _, err := fmt.Scanln(&reply); err != nil {
-		reply = ""
+	prompts := NewPromptSession()
+	defer func() {
+		if err := prompts.Close(); err != nil {
+			log.Warning(err.Error())
+		}
+	}()
+	reply, err := prompts.ReadLine("Proceed with migration? [y/N] ")
+	if err != nil {
+		log.Warning(err.Error())
+		log.Info("Migration cancelled")
+		os.Exit(0)
 	}
 	if !strings.EqualFold(strings.TrimSpace(reply), "Y") {
 		log.Info("Migration cancelled")
