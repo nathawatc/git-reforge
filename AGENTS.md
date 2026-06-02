@@ -29,18 +29,18 @@ golangci-lint run
 ```text
 main.go                 # CLI entry point — urfave/cli/v3 flags, orchestrates flow
 pkg/
-  config/config.go      # Config struct, InteractiveState, WorkDir() method
-  git/clone.go          # Clone (bare mirror → working), push, save (handles TTY & symlinks)
-  logging/logger.go     # slog wrapper with ANSI colors (imports pkg/ui)
-  rewrite/batch.go      # RewriteCommitsBatch, RewriteCommitsInteractive, filter generation
-  coauthor/batch.go     # RunCoauthorPhase, batch/interactive coauthor filtering
-  signing/commit.go     # HandleSigning (keep/none/gpg/ssh), ResignTags
-  shell/escape.go       # EscapeShell, EscapeSed, EscapeDoubleQuoted, QuoteSingle — shared shell escaping utilities
-  ui/
-    colors.go           # ANSI color constants (Red, Green, Yellow, Bold, NC, etc.)
-    display.go          # DisplayConfig, ShowSummary
-    input.go            # PromptSession — TTY / stdin reader wrapper
-    interactive.go      # InteractiveEdit — per-commit TTY menu loop
+	config/config.go      # Config struct, InteractiveState, WorkDir() method
+	git/clone.go          # Clone (bare mirror → working), push, save (handles TTY & symlinks)
+	logging/logger.go     # slog wrapper with ANSI colors (imports pkg/ui)
+	rewrite/batch.go      # RewriteCommitsBatch, RewriteCommitsInteractive, filter generation
+	coauthor/batch.go     # RunCoauthorPhase, batch/interactive coauthor filtering
+	signing/commit.go     # HandleSigning (keep/none/gpg/ssh), ResignTags
+	shell/escape.go       # EscapeShell, EscapeSed, EscapeDoubleQuoted, QuoteSingle — shared shell escaping utilities
+	ui/
+		colors.go           # ANSI color constants (Red, Green, Yellow, Bold, NC, etc.)
+		display.go          # DisplayConfig, ShowSummary
+		input.go            # PromptSession — TTY / stdin reader wrapper
+		interactive.go      # InteractiveEdit — per-commit TTY menu loop
 ```
 
 ### Execution Flow
