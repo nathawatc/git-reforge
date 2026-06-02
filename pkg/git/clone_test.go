@@ -18,7 +18,7 @@ func (testLogger) Success(string) {}
 func (testLogger) Warning(string) {}
 func (testLogger) Error(string)   {}
 
-func TestPushWarnsAndContinuesWhenTagPushFails(t *testing.T) {
+func TestPushFailsWhenTagPushFails(t *testing.T) {
 	if _, err := exec.LookPath("git"); err != nil {
 		t.Skip("git not available")
 	}
@@ -56,10 +56,15 @@ exit 0
 	cfg := config.New()
 	cfg.TempDir = tmpDir
 	cfg.DestURL = remoteDir
+	cfg.SaveDir = filepath.Join(tmpDir, "saved")
 	cfg.Logger = testLogger{}
 
-	if err := Push(cfg); err != nil {
-		t.Fatalf("Push() error = %v want nil", err)
+	err := Push(cfg)
+	if err == nil {
+		t.Fatal("Push() error = nil want tag push failure")
+	}
+	if !strings.Contains(err.Error(), "failed to push tags") {
+		t.Fatalf("Push() error = %v want failed to push tags", err)
 	}
 
 	branches := runGitOutput(t, remoteDir, "for-each-ref", "--format=%(refname)", "refs/heads")
@@ -136,7 +141,7 @@ func TestCloneCreatesMirrorAndWorkingRepository(t *testing.T) {
 	}
 }
 
-func TestPushPushesMirrorClonedRemoteTrackingBranches(t *testing.T) {
+func TestPushSkipsTagPushWhenRepositoryHasNoTags(t *testing.T) {
 	if _, err := exec.LookPath("git"); err != nil {
 		t.Skip("git not available")
 	}

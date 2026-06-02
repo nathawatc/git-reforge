@@ -11,8 +11,12 @@ import (
 	"github-to-codeberg/pkg/ui"
 )
 
-func Run(cfg *config.Config) error {
-	defer cleanupTempDir(cfg)
+func Run(cfg *config.Config) (retErr error) {
+	defer func() {
+		if retErr == nil {
+			cleanupTempDir(cfg)
+		}
+	}()
 
 	if err := git.Clone(cfg); err != nil {
 		return err

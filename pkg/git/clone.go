@@ -318,10 +318,11 @@ func Push(cfg *config.Config) error {
 	}
 
 	// Push tags with explicit refspec
-	cmd = exec.Command("git", "push", "--force", "origin", "refs/tags/*:refs/tags/*")
-	cmd.Dir = tmpDir + "/working"
-	if err := cmd.Run(); err != nil {
-		cfg.Logger.Warning("Failed to push some tags (this may be expected if no tags exist)")
+	if err := pushTags(tmpDir); err != nil {
+		if saveErr := PromptSaveOrCleanup(cfg, "tag push"); saveErr != nil {
+			return saveErr
+		}
+		return err
 	}
 
 	return nil
@@ -342,6 +343,25 @@ func pushBranches(tmpDir string) error {
 		}
 	}
 
+	return nil
+}
+
+func pushTags(tmpDir string) error {
+	workDir := tmpDir + "/working"
+
+	tagRefs, err := listRefs(workDir, "refs/tags")
+	if err != nil {
+		return err
+	}
+	if len(tagRefs) == 0 {
+		return nil
+	}
+
+	cmd := exec.Command("git", "push", "--force", "origin", "refs/tags/*:refs/tags/*")
+	cmd.Dir = workDir
+	if err := cmd.Run(); err != nil {
+		return fmt.Errorf("failed to push tags: %w", err)
+	}
 	return nil
 }
 
@@ -411,7 +431,7 @@ func PromptSaveOrCleanup(cfg *config.Config, failedStep string) (retErr error) {
 
 	tty, err := os.OpenFile("/dev/tty", os.O_RDWR, 0)
 	if err != nil {
-		return fmt.Errorf("failed to push branches and no terminal is available to choose save or cleanup: %w", err)
+		return fmt.Errorf("failed during %s and no terminal is available to choose save or cleanup: %w", failedStep, err)
 	}
 	defer func() {
 		if closeErr := tty.Close(); closeErr != nil && retErr == nil {
@@ -447,6 +467,10 @@ func PromptSaveOrCleanup(cfg *config.Config, failedStep string) (retErr error) {
 			return promptSavePath(cfg, tty, reader)
 		case "C":
 			cfg.Logger.Info("Cleanup selected. The temporary directory will be removed on exit.")
+			if err := os.RemoveAll(cfg.TempDir); err != nil {
+				return fmt.Errorf("failed to clean up temp directory %s: %w", cfg.TempDir, err)
+			}
+			cfg.TempDir = ""
 			return nil
 		default:
 			cfg.Logger.Warning("Invalid choice. Please enter S to save or C to clean up.")

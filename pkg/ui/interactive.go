@@ -17,10 +17,10 @@ func InteractiveEdit(cfg *config.Config) {
 
 	log.Info("Fetching commits from author(s): " + strings.Join(cfg.OldNames, ", "))
 
-	// Get all commits by old authors
+	// Get all commits by old authors or committers
 	var commits []string
 	for _, oldName := range cfg.OldNames {
-		commits = append(commits, getCommitsByAuthor(cfg.TempDir, oldName)...)
+		commits = append(commits, getCommitsByIdentity(cfg.TempDir, oldName)...)
 	}
 
 	// Remove duplicates
@@ -84,10 +84,17 @@ func InteractiveEdit(cfg *config.Config) {
 	}
 }
 
-func getCommitsByAuthor(tmpDir string, authorName string) []string {
-	escaped := regexp.QuoteMeta(authorName)
+func getCommitsByIdentity(tmpDir string, name string) []string {
+	escaped := regexp.QuoteMeta(name)
 
-	cmd := exec.Command("git", "log", "--all", "--format=%H", "--author="+escaped)
+	var commits []string
+	commits = append(commits, getCommitsByLogFilter(tmpDir, "--author="+escaped)...)
+	commits = append(commits, getCommitsByLogFilter(tmpDir, "--committer="+escaped)...)
+	return uniqueList(commits)
+}
+
+func getCommitsByLogFilter(tmpDir string, filter string) []string {
+	cmd := exec.Command("git", "log", "--all", "--format=%H", filter)
 	cmd.Dir = tmpDir + "/working"
 	output, err := cmd.Output()
 	if err != nil {
