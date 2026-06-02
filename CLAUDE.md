@@ -61,7 +61,7 @@ pkg/
 | Error handling | Functions return `error`, CLI layer logs and exits with code 1                     |
 | Temp dir       | `os.MkdirTemp()` root; `cfg.WorkDir()` returns `$TEMP_DIR/working`                 |
 | Logger         | `log/slog` stdlib with ANSI colors via `pkg/ui` constants                          |
-| CLI flags      | `urfave/cli/v2` with explicit `&cli.StringFlag{}` / `&cli.BoolFlag{}` types        |
+| CLI flags      | `urfave/cli/v3` with explicit flag types; `--old-name` uses `StringSliceFlag`       |
 | Shell escaping | `pkg/shell/escape.go` — EscapeShell for bash, EscapeSed for sed                    |
 | Colors         | Single source: `pkg/ui/colors.go` — all packages import `pkg/ui` for constants     |
 

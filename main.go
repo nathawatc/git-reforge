@@ -48,7 +48,7 @@ func main() {
 				Aliases: []string{"e"},
 				Usage:   "New author email",
 			},
-			&cli.StringFlag{
+			&cli.StringSliceFlag{
 				Name:    "old-name",
 				Aliases: []string{"o"},
 				Usage:   "Old author name(s) to replace",
@@ -124,11 +124,7 @@ func main() {
 				cfg.SignMode = "none"
 			}
 
-			oldNameStr := c.String("old-name")
-			if oldNameStr != "" {
-				parts := splitOldNames(oldNameStr)
-				cfg.OldNames = append(cfg.OldNames, parts...)
-			}
+			cfg.OldNames = append(cfg.OldNames, collectOldNames(c.StringSlice("old-name"))...)
 
 			if err := validateArgs(cfg); err != nil {
 				log.Error(err.Error())
@@ -137,6 +133,7 @@ func main() {
 
 			checkDependencies(cfg)
 			ui.DisplayConfig(cfg)
+			defer cleanupTempDir(cfg)
 
 			if err := git.Clone(cfg); err != nil {
 				log.Error(err.Error())
@@ -174,7 +171,7 @@ func main() {
 			}
 
 			if !cfg.NoPush {
-				if err := git.Push(cfg.TempDir, cfg.DestURL); err != nil {
+				if err := git.Push(cfg); err != nil {
 					log.Error(err.Error())
 					return err
 				}
@@ -184,12 +181,6 @@ func main() {
 
 			ui.ShowSummary(cfg)
 
-			if cfg.TempDir != "" {
-				if err := os.RemoveAll(cfg.TempDir); err != nil {
-					log.Warning("Failed to clean up temp directory: " + cfg.TempDir)
-				}
-			}
-
 			return nil
 		},
 	}
@@ -197,6 +188,15 @@ func main() {
 	if err := cmd.Run(context.Background(), os.Args); err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
+	}
+}
+
+func cleanupTempDir(cfg *config.Config) {
+	if cfg.TempDir == "" {
+		return
+	}
+	if err := os.RemoveAll(cfg.TempDir); err != nil {
+		cfg.Logger.Warning("Failed to clean up temp directory: " + cfg.TempDir)
 	}
 }
 
@@ -221,6 +221,10 @@ func validateArgs(cfg *config.Config) error {
 		return fmt.Errorf("empty string is not a valid old author name (-o, --old-name)")
 	}
 
+	if cfg.SignMode == "" {
+		cfg.SignMode = "keep"
+	}
+
 	if cfg.SignMode == "gpg" && cfg.GPGKey == "" {
 		return fmt.Errorf("GPG key is required when using --sign-mode=gpg (--gpg-key)")
 	}
@@ -229,10 +233,22 @@ func validateArgs(cfg *config.Config) error {
 		return fmt.Errorf("SSH key path is required when using --sign-mode=ssh (--ssh-key)")
 	}
 
+	if !slices.Contains([]string{"keep", "gpg", "ssh", "none"}, cfg.SignMode) {
+		return fmt.Errorf("invalid sign mode: %s (must be: keep|gpg|ssh|none)", cfg.SignMode)
+	}
+
+	if cfg.CoauthorMode != "" && !slices.Contains([]string{"rewrite", "remove", "interactive"}, cfg.CoauthorMode) {
+		return fmt.Errorf("invalid coauthor mode: %s (must be: rewrite|remove|interactive)", cfg.CoauthorMode)
+	}
+
 	if cfg.SaveDir != "" {
 		if _, err := os.Stat(cfg.SaveDir); err == nil {
 			return fmt.Errorf("save directory already exists: %s", cfg.SaveDir)
 		}
+	}
+
+	if cfg.DestURL == "" && cfg.SaveDir != "" {
+		cfg.NoPush = true
 	}
 
 	if cfg.CoauthorMode != "" {
@@ -245,10 +261,6 @@ func validateArgs(cfg *config.Config) error {
 		if cfg.CoauthorNewEmail == "" {
 			cfg.CoauthorNewEmail = cfg.NewEmail
 		}
-	}
-
-	if cfg.SignMode == "" {
-		cfg.SignMode = "keep"
 	}
 
 	return nil
@@ -264,6 +276,10 @@ func checkDependencies(cfg *config.Config) {
 	}
 
 	if cfg.SignMode == "gpg" {
+		if _, err := exec.LookPath("gpg"); err != nil {
+			log.Error("gpg is not installed (required for GPG signing)")
+			os.Exit(1)
+		}
 		if err := exec.Command("gpg", "--list-secret-keys", cfg.GPGKey).Run(); err != nil {
 			log.Error("GPG key not found: " + cfg.GPGKey)
 			os.Exit(1)
@@ -271,6 +287,10 @@ func checkDependencies(cfg *config.Config) {
 	}
 
 	if cfg.SignMode == "ssh" {
+		if _, err := exec.LookPath("ssh-keygen"); err != nil {
+			log.Error("ssh-keygen is not installed (required for SSH signing)")
+			os.Exit(1)
+		}
 		if _, err := os.Stat(cfg.SSHKey); os.IsNotExist(err) {
 			log.Error("SSH key file not found: " + cfg.SSHKey)
 			os.Exit(1)
@@ -287,6 +307,14 @@ func splitOldNames(s string) []string {
 		if trimmed != "" {
 			names = append(names, trimmed)
 		}
+	}
+	return names
+}
+
+func collectOldNames(values []string) []string {
+	var names []string
+	for _, value := range values {
+		names = append(names, splitOldNames(value)...)
 	}
 	return names
 }

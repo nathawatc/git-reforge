@@ -57,7 +57,7 @@ go build .
 | Option                  | Description                                                 |
 | ----------------------- | ----------------------------------------------------------- |
 | `-n, --new-name <name>` | New author name                                             |
-| `-o, --old-name <name>` | Old author name(s) to replace (can be comma-separated)      |
+| `-o, --old-name <name>` | Old author name(s) to replace (repeatable or comma-separated) |
 | `-i, --interactive`     | Enable interactive mode for per-commit editing              |
 | `--sign-mode <mode>`    | Signing mode: `keep\|gpg\|ssh\|none` (default: `keep`)      |
 | `--gpg-key <keyid>`     | GPG key ID for re-signing (required if `--sign-mode=gpg`)   |
@@ -116,7 +116,7 @@ go build .
 ```bash
 ./github-to-codeberg -s https://github.com/user/repo.git \
 -d https://codeberg.org/user/repo.git \
--o "OldName1,OldName2" \
+-o "OldName1" -o "OldName2" \
 -n "NewName" \
 -e newuser@noreply.codeberg.org
 ```
