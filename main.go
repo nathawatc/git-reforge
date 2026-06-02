@@ -133,7 +133,6 @@ func main() {
 			log.Success("All dependencies satisfied")
 
 			ui.DisplayConfig(cfg)
-			defer cleanupTempDir(cfg)
 
 			if err := migration.Run(cfg); err != nil {
 				log.Error(err.Error())
@@ -147,14 +146,5 @@ func main() {
 	if err := cmd.Run(context.Background(), os.Args); err != nil {
 		_, _ = fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
-	}
-}
-
-func cleanupTempDir(cfg *config.Config) {
-	if cfg.TempDir == "" {
-		return
-	}
-	if err := os.RemoveAll(cfg.TempDir); err != nil {
-		cfg.Logger.Warning("Failed to clean up temp directory: " + cfg.TempDir)
 	}
 }

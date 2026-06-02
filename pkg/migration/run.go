@@ -1,6 +1,8 @@
 package migration
 
 import (
+	"os"
+
 	"github-to-codeberg/pkg/coauthor"
 	"github-to-codeberg/pkg/config"
 	"github-to-codeberg/pkg/git"
@@ -10,6 +12,8 @@ import (
 )
 
 func Run(cfg *config.Config) error {
+	defer cleanupTempDir(cfg)
+
 	if err := git.Clone(cfg); err != nil {
 		return err
 	}
@@ -49,4 +53,13 @@ func Run(cfg *config.Config) error {
 
 	ui.ShowSummary(cfg)
 	return nil
+}
+
+func cleanupTempDir(cfg *config.Config) {
+	if cfg.TempDir == "" {
+		return
+	}
+	if err := os.RemoveAll(cfg.TempDir); err != nil && cfg.Logger != nil {
+		cfg.Logger.Warning("Failed to clean up temp directory: " + cfg.TempDir)
+	}
 }
