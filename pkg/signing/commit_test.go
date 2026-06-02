@@ -32,7 +32,7 @@ func TestStripTagPreservesSubjectAndBody(t *testing.T) {
 	runGit(t, workDir, "init")
 	runGit(t, workDir, "config", "user.name", "Test User")
 	runGit(t, workDir, "config", "user.email", "test@example.org")
-	writeFile(t, filepath.Join(workDir, "file.txt"), "contents\n")
+	writeFile(t, filepath.Join(workDir, "file.txt"))
 	runGit(t, workDir, "add", "file.txt")
 	runGit(t, workDir, "commit", "-m", "initial")
 	runGit(t, workDir, "tag", "-a", "v1.0.0", "-m", "Release v1.0.0", "-m", "Body line one\nBody line two")
@@ -77,7 +77,7 @@ func TestGetTagRecreateMessagePreservesIndentedBody(t *testing.T) {
 	runGit(t, workDir, "init")
 	runGit(t, workDir, "config", "user.name", "Test User")
 	runGit(t, workDir, "config", "user.email", "test@example.org")
-	writeFile(t, filepath.Join(workDir, "file.txt"), "contents\n")
+	writeFile(t, filepath.Join(workDir, "file.txt"))
 	runGit(t, workDir, "add", "file.txt")
 	runGit(t, workDir, "commit", "-m", "initial")
 	runGit(t, workDir, "tag", "-a", "v1.0.1", "-m", "Release v1.0.1", "-m", "  indented body\nnext line")
@@ -114,7 +114,7 @@ func TestHandleNonePreservesCommitDates(t *testing.T) {
 	runGit(t, workDir, "init")
 	runGit(t, workDir, "config", "user.name", "Test User")
 	runGit(t, workDir, "config", "user.email", "test@example.org")
-	writeFile(t, filepath.Join(workDir, "file.txt"), "contents\n")
+	writeFile(t, filepath.Join(workDir, "file.txt"))
 	runGit(t, workDir, "add", "file.txt")
 	runGitWithEnv(t, workDir, []string{
 		"GIT_AUTHOR_DATE=2004-05-06T07:08:09+07:00",
@@ -150,7 +150,7 @@ func TestResignTagsReturnsFailedToErrorWhenTagSigningFails(t *testing.T) {
 	runGit(t, workDir, "init")
 	runGit(t, workDir, "config", "user.name", "Test User")
 	runGit(t, workDir, "config", "user.email", "test@example.org")
-	writeFile(t, filepath.Join(workDir, "file.txt"), "contents\n")
+	writeFile(t, filepath.Join(workDir, "file.txt"))
 	runGit(t, workDir, "add", "file.txt")
 	runGit(t, workDir, "commit", "-m", "initial")
 	runGit(t, workDir, "-c", "tag.gpgSign=false", "tag", "-a", "v1.0.0", "-m", "Release v1.0.0")
@@ -189,7 +189,7 @@ func TestHandleSSHSignedCommitsAndAnnotatedTags(t *testing.T) {
 	runGit(t, workDir, "init")
 	runGit(t, workDir, "config", "user.name", "Test User")
 	runGit(t, workDir, "config", "user.email", "test@example.org")
-	writeFile(t, filepath.Join(workDir, "file.txt"), "contents\n")
+	writeFile(t, filepath.Join(workDir, "file.txt"))
 	runGit(t, workDir, "add", "file.txt")
 	runGit(t, workDir, "commit", "-m", "initial")
 	runGit(t, workDir, "-c", "tag.gpgSign=false", "tag", "-a", "v1.0.0", "-m", "Release v1.0.0")
@@ -239,7 +239,7 @@ func TestHandleGPGSignedCommitsAndAnnotatedTags(t *testing.T) {
 	runGit(t, workDir, "init")
 	runGit(t, workDir, "config", "user.name", "Test User")
 	runGit(t, workDir, "config", "user.email", "test@example.org")
-	writeFile(t, filepath.Join(workDir, "file.txt"), "contents\n")
+	writeFile(t, filepath.Join(workDir, "file.txt"))
 	runGit(t, workDir, "add", "file.txt")
 	runGit(t, workDir, "commit", "-m", "initial")
 	runGit(t, workDir, "-c", "tag.gpgSign=false", "tag", "-a", "v1.0.0", "-m", "Release v1.0.0")
@@ -265,9 +265,9 @@ func TestHandleGPGSignedCommitsAndAnnotatedTags(t *testing.T) {
 	}
 }
 
-func writeFile(t *testing.T, path string, contents string) {
+func writeFile(t *testing.T, path string) {
 	t.Helper()
-	if err := os.WriteFile(path, []byte(contents), 0644); err != nil {
+	if err := os.WriteFile(path, []byte("contents\n"), 0644); err != nil {
 		t.Fatal(err)
 	}
 }

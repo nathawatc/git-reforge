@@ -48,7 +48,3 @@ func (l *Logger) Header(msg string) {
 	fmt.Println(strings.Repeat("═", 64))
 	fmt.Println()
 }
-
-func (l *Logger) Printf(format string, args ...any) {
-	fmt.Printf(format, args...)
-}

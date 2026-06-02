@@ -42,7 +42,7 @@ pkg/
 	rewrite/batch.go      # RewriteCommitsBatch, RewriteCommitsInteractive, filter generation
 	coauthor/batch.go     # RunCoauthorPhase, batch/interactive coauthor filtering
 	signing/commit.go     # HandleSigning (keep/none/gpg/ssh), ResignTags
-	shell/escape.go       # EscapeShell, EscapeSed, EscapeDoubleQuoted, QuoteSingle — shared shell/sed escaping utilities
+	shell/escape.go       # EscapeSed, EscapeSedReplacement, EscapeDoubleQuoted, QuoteSingle — shared shell/sed escaping utilities
 	ui/
 		colors.go           # ANSI color constants (Red, Green, Yellow, Bold, NC, etc.)
 		display.go          # DisplayConfig (preflight prompt + summary)
