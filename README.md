@@ -54,18 +54,18 @@ go build .
 
 ### Optional Options
 
-| Option                  | Description                                                 |
-| ----------------------- | ----------------------------------------------------------- |
-| `-n, --new-name <name>` | New author name                                             |
+| Option                  | Description                                                   |
+| ----------------------- | ------------------------------------------------------------- |
+| `-n, --new-name <name>` | New author name                                               |
 | `-o, --old-name <name>` | Old author name(s) to replace (repeatable or comma-separated) |
-| `-i, --interactive`     | Enable interactive mode for per-commit editing              |
-| `--sign-mode <mode>`    | Signing mode: `keep\|gpg\|ssh\|none` (default: `keep`)      |
-| `--gpg-key <keyid>`     | GPG key ID for re-signing (required if `--sign-mode=gpg`)   |
-| `--ssh-key <path>`      | SSH key path for re-signing (required if `--sign-mode=ssh`) |
-| `--nosign`              | Shorthand for `--sign-mode=none`                            |
-| `--save-dir <path>`     | Save rewritten repo to `<path>` (directory must not exist)  |
-| `--no-push`             | Rewrite history locally but skip pushing to Codeberg        |
-| `-h, --help`            | Show help message                                           |
+| `-i, --interactive`     | Enable interactive mode for per-commit editing                |
+| `--sign-mode <mode>`    | Signing mode: `keep\|gpg\|ssh\|none` (default: `keep`)        |
+| `--gpg-key <keyid>`     | GPG key ID for re-signing (required if `--sign-mode=gpg`)     |
+| `--ssh-key <path>`      | SSH key path for re-signing (required if `--sign-mode=ssh`)   |
+| `--nosign`              | Shorthand for `--sign-mode=none`                              |
+| `--save-dir <path>`     | Save rewritten repo to `<path>` (directory must not exist)    |
+| `--no-push`             | Rewrite history locally but skip pushing to Codeberg          |
+| `-h, --help`            | Show help message                                             |
 
 ### Co-Authored-by Options
 
