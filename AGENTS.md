@@ -17,6 +17,9 @@ go build .
 # Format code and optimize imports
 goimports -w -local github-to-codeberg .
 
+# Tidy module dependencies
+go mod tidy
+
 # Run tests
 go test ./...
 
