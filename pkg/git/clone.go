@@ -29,6 +29,15 @@ func Clone(cfg *config.Config) error {
 		return fmt.Errorf("failed to create temp directory: %w", err)
 	}
 	cfg.TempDir = tmpDir
+	cloneSucceeded := false
+	defer func() {
+		if !cloneSucceeded {
+			if err := os.RemoveAll(tmpDir); err != nil && log != nil {
+				log.Warning("Failed to clean up failed clone temp directory: " + tmpDir)
+			}
+			cfg.TempDir = ""
+		}
+	}()
 	log.Info("Created temporary directory: " + tmpDir)
 
 	// Clone as bare mirror
@@ -46,6 +55,7 @@ func Clone(cfg *config.Config) error {
 	}
 
 	log.Success("Repository cloned successfully")
+	cloneSucceeded = true
 	return nil
 }
 

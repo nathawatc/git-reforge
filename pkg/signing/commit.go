@@ -1,6 +1,7 @@
 package signing
 
 import (
+	"errors"
 	"fmt"
 	"os/exec"
 	"strings"
@@ -180,32 +181,47 @@ func ResignTags(cfg *config.Config) error {
 	switch cfg.SignMode {
 	case "none":
 		log.Info("Stripping signatures from annotated tags...")
+		var failures []error
 		for _, tag := range annotatedTags {
 			if err := stripTag(cfg, tag); err != nil {
 				log.Warning("Failed to strip tag: " + tag)
+				failures = append(failures, fmt.Errorf("failed to strip tag %s: %w", tag, err))
 				continue
 			}
 			log.Info("  Stripped signature from tag: " + tag)
 		}
+		if err := errors.Join(failures...); err != nil {
+			return err
+		}
 		log.Success("Tag signatures removed")
 	case "gpg":
 		log.Info("Re-signing annotated tags with GPG key: " + cfg.GPGKey + "...")
+		var failures []error
 		for _, tag := range annotatedTags {
 			if err := resignTagGPG(cfg, tag); err != nil {
 				log.Warning("Failed to re-sign tag: " + tag)
+				failures = append(failures, fmt.Errorf("failed to re-sign GPG tag %s: %w", tag, err))
 				continue
 			}
 			log.Info("  Re-signed tag: " + tag)
 		}
+		if err := errors.Join(failures...); err != nil {
+			return err
+		}
 		log.Success("Tags re-signed with GPG")
 	case "ssh":
 		log.Info("Re-signing annotated tags with SSH key: " + cfg.SSHKey + "...")
+		var failures []error
 		for _, tag := range annotatedTags {
 			if err := resignTagSSH(cfg, tag); err != nil {
 				log.Warning("Failed to re-sign tag: " + tag)
+				failures = append(failures, fmt.Errorf("failed to re-sign SSH tag %s: %w", tag, err))
 				continue
 			}
 			log.Info("  Re-signed tag: " + tag)
+		}
+		if err := errors.Join(failures...); err != nil {
+			return err
 		}
 		log.Success("Tags re-signed with SSH")
 	}

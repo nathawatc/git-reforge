@@ -136,6 +136,40 @@ func TestHandleNonePreservesCommitDates(t *testing.T) {
 	}
 }
 
+func TestResignTagsReturnsFailedToErrorWhenTagSigningFails(t *testing.T) {
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skip("git not available")
+	}
+
+	tmpDir := t.TempDir()
+	workDir := filepath.Join(tmpDir, "working")
+	if err := os.Mkdir(workDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+
+	runGit(t, workDir, "init")
+	runGit(t, workDir, "config", "user.name", "Test User")
+	runGit(t, workDir, "config", "user.email", "test@example.org")
+	writeFile(t, filepath.Join(workDir, "file.txt"), "contents\n")
+	runGit(t, workDir, "add", "file.txt")
+	runGit(t, workDir, "commit", "-m", "initial")
+	runGit(t, workDir, "-c", "tag.gpgSign=false", "tag", "-a", "v1.0.0", "-m", "Release v1.0.0")
+
+	cfg := config.New()
+	cfg.TempDir = tmpDir
+	cfg.SignMode = "ssh"
+	cfg.SSHKey = filepath.Join(tmpDir, "missing-key")
+	cfg.Logger = testLogger{}
+
+	err := ResignTags(cfg)
+	if err == nil {
+		t.Fatal("ResignTags() error = nil want tag signing failure")
+	}
+	if !strings.Contains(err.Error(), "failed to re-sign SSH tag v1.0.0") {
+		t.Fatalf("ResignTags() error = %v want tag failure context", err)
+	}
+}
+
 func TestHandleSSHSignedCommitsAndAnnotatedTags(t *testing.T) {
 	if _, err := exec.LookPath("git"); err != nil {
 		t.Skip("git not available")

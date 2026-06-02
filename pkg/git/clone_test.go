@@ -141,6 +141,24 @@ func TestCloneCreatesMirrorAndWorkingRepository(t *testing.T) {
 	}
 }
 
+func TestCloneCleansTempDirOnCloneFailure(t *testing.T) {
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skip("git not available")
+	}
+
+	cfg := config.New()
+	cfg.SourceURL = filepath.Join(t.TempDir(), "missing.git")
+	cfg.Logger = testLogger{}
+
+	err := Clone(cfg)
+	if err == nil {
+		t.Fatal("Clone() error = nil want clone failure")
+	}
+	if cfg.TempDir != "" {
+		t.Fatalf("TempDir = %q want empty after clone failure", cfg.TempDir)
+	}
+}
+
 func TestPushSkipsTagPushWhenRepositoryHasNoTags(t *testing.T) {
 	if _, err := exec.LookPath("git"); err != nil {
 		t.Skip("git not available")
