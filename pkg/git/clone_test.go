@@ -34,7 +34,7 @@ func TestPushWarnsAndContinuesWhenTagPushFails(t *testing.T) {
 	writeFile(t, filepath.Join(remoteDir, "hooks", "pre-receive"), `#!/usr/bin/env bash
 while read -r _old _new ref; do
   case "$ref" in
-    refs/tags/*) exit 1 ;;
+	refs/tags/*) exit 1 ;;
   esac
 done
 exit 0

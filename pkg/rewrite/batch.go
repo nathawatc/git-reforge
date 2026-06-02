@@ -48,19 +48,19 @@ OLD_NAMES_ARRAY=(
 	script.WriteString(`)
 
 for old_name in "${OLD_NAMES_ARRAY[@]}"; do
-    if [ "$GIT_AUTHOR_NAME" = "$old_name" ]; then
-        export GIT_AUTHOR_NAME="$FILTER_NEW_NAME"
-        export GIT_AUTHOR_EMAIL="$FILTER_NEW_EMAIL"
-        break
-    fi
+	if [ "$GIT_AUTHOR_NAME" = "$old_name" ]; then
+		export GIT_AUTHOR_NAME="$FILTER_NEW_NAME"
+		export GIT_AUTHOR_EMAIL="$FILTER_NEW_EMAIL"
+		break
+	fi
 done
 
 for old_name in "${OLD_NAMES_ARRAY[@]}"; do
-    if [ "$GIT_COMMITTER_NAME" = "$old_name" ]; then
-        export GIT_COMMITTER_NAME="$FILTER_NEW_NAME"
-        export GIT_COMMITTER_EMAIL="$FILTER_NEW_EMAIL"
-        break
-    fi
+	if [ "$GIT_COMMITTER_NAME" = "$old_name" ]; then
+		export GIT_COMMITTER_NAME="$FILTER_NEW_NAME"
+		export GIT_COMMITTER_EMAIL="$FILTER_NEW_EMAIL"
+		break
+	fi
 done
 `)
 
