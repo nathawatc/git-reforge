@@ -26,13 +26,17 @@ func RewriteCommitsBatch(cfg *config.Config) error {
 	log := cfg.Logger
 	log.Header("Rewriting Commit History")
 
-	if len(cfg.OldNames) == 1 {
-		log.Info(fmt.Sprintf("Rewriting commits from '%s' to '%s' <%s>", cfg.OldNames[0], cfg.NewName, cfg.NewEmail))
-	} else {
-		log.Info(fmt.Sprintf("Rewriting commits from %d authors to '%s' <%s>", len(cfg.OldNames), cfg.NewName, cfg.NewEmail))
-		for _, name := range cfg.OldNames {
-			log.Info("  - " + name)
+	if cfg.NewName != "" {
+		if len(cfg.OldNames) == 1 {
+			log.Info(fmt.Sprintf("Rewriting commits from '%s' to '%s' <%s>", cfg.OldNames[0], cfg.NewName, cfg.NewEmail))
+		} else {
+			log.Info(fmt.Sprintf("Rewriting commits from %d authors to '%s' <%s>", len(cfg.OldNames), cfg.NewName, cfg.NewEmail))
+			for _, name := range cfg.OldNames {
+				log.Info("  - " + name)
+			}
 		}
+	} else {
+		log.Info(fmt.Sprintf("Rewriting commit emails to <%s> for author(s): %s", cfg.NewEmail, strings.Join(cfg.OldNames, ", ")))
 	}
 
 	filterScript := filepath.Join(cfg.TempDir, "batch_filter.sh")
@@ -49,7 +53,9 @@ OLD_NAMES_ARRAY=(
 
 for old_name in "${OLD_NAMES_ARRAY[@]}"; do
 	if [ "$GIT_AUTHOR_NAME" = "$old_name" ]; then
-		export GIT_AUTHOR_NAME="$FILTER_NEW_NAME"
+		if [ -n "$FILTER_NEW_NAME" ]; then
+			export GIT_AUTHOR_NAME="$FILTER_NEW_NAME"
+		fi
 		export GIT_AUTHOR_EMAIL="$FILTER_NEW_EMAIL"
 		break
 	fi
@@ -57,7 +63,9 @@ done
 
 for old_name in "${OLD_NAMES_ARRAY[@]}"; do
 	if [ "$GIT_COMMITTER_NAME" = "$old_name" ]; then
-		export GIT_COMMITTER_NAME="$FILTER_NEW_NAME"
+		if [ -n "$FILTER_NEW_NAME" ]; then
+			export GIT_COMMITTER_NAME="$FILTER_NEW_NAME"
+		fi
 		export GIT_COMMITTER_EMAIL="$FILTER_NEW_EMAIL"
 		break
 	fi
@@ -141,9 +149,11 @@ func generateInteractiveFilter(cfg *config.Config) (string, error) {
 			fmt.Fprintf(&script, "    %s)\n        ;;\n", hash.String())
 		} else {
 			fmt.Fprintf(&script, "    %s)\n", hash.String())
-			fmt.Fprintf(&script, "        export GIT_AUTHOR_NAME=\"%s\"\n", shell.EscapeDoubleQuoted(override.Name))
+			if override.Name != "" {
+				fmt.Fprintf(&script, "        export GIT_AUTHOR_NAME=\"%s\"\n", shell.EscapeDoubleQuoted(override.Name))
+				fmt.Fprintf(&script, "        export GIT_COMMITTER_NAME=\"%s\"\n", shell.EscapeDoubleQuoted(override.Name))
+			}
 			fmt.Fprintf(&script, "        export GIT_AUTHOR_EMAIL=\"%s\"\n", shell.EscapeDoubleQuoted(override.Email))
-			fmt.Fprintf(&script, "        export GIT_COMMITTER_NAME=\"%s\"\n", shell.EscapeDoubleQuoted(override.Name))
 			fmt.Fprintf(&script, "        export GIT_COMMITTER_EMAIL=\"%s\"\n", shell.EscapeDoubleQuoted(override.Email))
 			script.WriteString("        ;;\n")
 		}

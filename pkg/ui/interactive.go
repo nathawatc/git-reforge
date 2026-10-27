@@ -60,7 +60,11 @@ func InteractiveEdit(cfg *config.Config) {
 				fmt.Printf("  %sSkipped%s - No changes applied\n", Bold, NC)
 			} else {
 				fmt.Printf("  %sDefault changes:%s\n", Bold, NC)
-				fmt.Printf("    Name:    %s → %s\n", authorName, cfg.NewName)
+				targetName := cfg.NewName
+				if targetName == "" {
+					targetName = authorName
+				}
+				fmt.Printf("    Name:    %s → %s\n", authorName, targetName)
 				fmt.Printf("    Email:   %s → %s\n", authorEmail, cfg.NewEmail)
 			}
 
@@ -217,8 +221,12 @@ func promptCommitChoice(commitHash string, remainingCommits []string, hasOverrid
 			return ""
 		case "A":
 			if !hasOverride {
+				targetName := cfg.NewName
+				if targetName == "" {
+					targetName = getCommitAuthorName(cfg.TempDir, commitHash)
+				}
 				cfg.State.CommitOverrides[hash] = config.CommitOverride{
-					Name:  cfg.NewName,
+					Name:  targetName,
 					Email: cfg.NewEmail,
 				}
 			}
@@ -232,8 +240,12 @@ func promptCommitChoice(commitHash string, remainingCommits []string, hasOverrid
 			cfg.Logger.Info("Applying default changes to all remaining commits...")
 			for _, remainingHash := range remainingCommits {
 				h := plumbing.NewHash(remainingHash)
+				targetName := cfg.NewName
+				if targetName == "" {
+					targetName = getCommitAuthorName(cfg.TempDir, remainingHash)
+				}
 				cfg.State.CommitOverrides[h] = config.CommitOverride{
-					Name:  cfg.NewName,
+					Name:  targetName,
 					Email: cfg.NewEmail,
 				}
 			}
@@ -249,6 +261,13 @@ func promptCommitChoice(commitHash string, remainingCommits []string, hasOverrid
 
 func getCommitSubject(tmpDir string, hash string) string {
 	cmd := exec.Command("git", "log", "-1", "--format=%s", hash)
+	cmd.Dir = tmpDir + "/working"
+	output, _ := cmd.Output()
+	return strings.TrimSpace(string(output))
+}
+
+func getCommitAuthorName(tmpDir string, hash string) string {
+	cmd := exec.Command("git", "log", "-1", "--format=%an", hash)
 	cmd.Dir = tmpDir + "/working"
 	output, _ := cmd.Output()
 	return strings.TrimSpace(string(output))

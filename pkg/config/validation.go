@@ -77,6 +77,9 @@ func Validate(cfg *Config) error {
 		if cfg.CoauthorNewEmail == "" {
 			cfg.CoauthorNewEmail = cfg.NewEmail
 		}
+		if cfg.CoauthorMode == "rewrite" && cfg.CoauthorNewName == "" {
+			return fmt.Errorf("coauthor replacement name is required when --coauthor-mode=rewrite (--coauthor-new-name or -n)")
+		}
 	}
 
 	return nil

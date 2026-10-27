@@ -28,7 +28,11 @@ func DisplayConfig(cfg *config.Config) {
 			fmt.Printf("                 %s\n", oldName)
 		}
 	}
-	fmt.Printf("  %sNew Author:%s    %s\n", Bold, NC, cfg.NewName)
+	if cfg.NewName != "" {
+		fmt.Printf("  %sNew Author:%s    %s\n", Bold, NC, cfg.NewName)
+	} else {
+		fmt.Printf("  %sNew Author:%s    %s(keep original)%s\n", Bold, NC, Yellow, NC)
+	}
 	fmt.Printf("  %sNew Email:%s     %s\n", Bold, NC, cfg.NewEmail)
 	fmt.Println()
 	fmt.Printf("  %sInteractive:%s   %t\n", Bold, NC, cfg.Interactive)
@@ -92,12 +96,14 @@ func ShowSummary(cfg *config.Config) {
 	log.Header("Migration Complete!")
 
 	fmt.Printf("  %s✓%s Repository migrated from GitHub to Codeberg\n", Green, NC)
-	if len(cfg.OldNames) == 1 {
-		fmt.Printf("  %s✓%s Author '%s' changed to '%s'\n", Green, NC, cfg.OldNames[0], cfg.NewName)
-	} else {
-		fmt.Printf("  %s✓%s Authors changed to '%s':\n", Green, NC, cfg.NewName)
-		for _, oldName := range cfg.OldNames {
-			fmt.Printf("      - %s\n", oldName)
+	if cfg.NewName != "" {
+		if len(cfg.OldNames) == 1 {
+			fmt.Printf("  %s✓%s Author '%s' changed to '%s'\n", Green, NC, cfg.OldNames[0], cfg.NewName)
+		} else {
+			fmt.Printf("  %s✓%s Authors changed to '%s':\n", Green, NC, cfg.NewName)
+			for _, oldName := range cfg.OldNames {
+				fmt.Printf("      - %s\n", oldName)
+			}
 		}
 	}
 	fmt.Printf("  %s✓%s Email changed to '%s'\n", Green, NC, cfg.NewEmail)

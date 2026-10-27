@@ -105,3 +105,14 @@ func TestValidateAppliesCoauthorDefaults(t *testing.T) {
 		t.Fatalf("CoauthorNewEmail = %q want new@example.org", cfg.CoauthorNewEmail)
 	}
 }
+
+func TestValidateRejectsCoauthorRewriteWithoutNewName(t *testing.T) {
+	cfg := validConfig()
+	cfg.NewName = ""
+	cfg.CoauthorMode = "rewrite"
+	cfg.CoauthorNewName = ""
+
+	if err := Validate(cfg); err == nil {
+		t.Fatal("Validate() error = nil want error when coauthor rewrite has no new name")
+	}
+}
