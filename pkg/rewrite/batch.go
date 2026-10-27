@@ -132,9 +132,9 @@ func generateInteractiveFilter(cfg *config.Config) (string, error) {
 	script.WriteString("case \"$GIT_COMMIT\" in\n")
 	for hash, override := range cfg.State.CommitOverrides {
 		if override.Skip {
-			fmt.Fprintf(&script, "    %s)\n        ;;\n", hash.String())
+			fmt.Fprintf(&script, "    %s)\n        ;;\n", hash)
 		} else {
-			fmt.Fprintf(&script, "    %s)\n", hash.String())
+			fmt.Fprintf(&script, "    %s)\n", hash)
 			if override.Name != "" {
 				fmt.Fprintf(&script, "        export GIT_AUTHOR_NAME=\"%s\"\n", shell.EscapeDoubleQuoted(override.Name))
 				fmt.Fprintf(&script, "        export GIT_COMMITTER_NAME=\"%s\"\n", shell.EscapeDoubleQuoted(override.Name))
@@ -166,11 +166,11 @@ func generateMessageFilter(cfg *config.Config) (string, error) {
 				msg += "\n"
 			}
 			// Write message to sidecar file
-			msgFile := filepath.Join(cfg.TempDir, "msg_"+hash.String()+".txt")
+			msgFile := filepath.Join(cfg.TempDir, "msg_"+hash+".txt")
 			if err := os.WriteFile(msgFile, []byte(msg), 0644); err != nil {
 				return "", fmt.Errorf("failed to write message file: %w", err)
 			}
-			fmt.Fprintf(&script, "    %s)\n        cat %s\n        ;;\n", hash.String(), shell.QuoteSingle(msgFile))
+			fmt.Fprintf(&script, "    %s)\n        cat %s\n        ;;\n", hash, shell.QuoteSingle(msgFile))
 		}
 		script.WriteString("    *)\n        cat\n        ;;\nesac\n")
 	} else {

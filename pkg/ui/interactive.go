@@ -6,8 +6,6 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/go-git/go-git/v5/plumbing"
-
 	"github-to-codeberg/pkg/config"
 )
 
@@ -34,13 +32,19 @@ func InteractiveEdit(cfg *config.Config) {
 	log.Info(fmt.Sprintf("Found %d commit(s) to review", len(commits)))
 	fmt.Println()
 
+	prompts := NewPromptSession()
+	defer func() {
+		if err := prompts.Close(); err != nil {
+			log.Warning(err.Error())
+		}
+	}()
+
 	current := 0
 	for _, commitHash := range commits {
 		current++
-		hash := plumbing.NewHash(commitHash)
 		remainingCommits := commits[current-1:]
 		for {
-			override, hasOverride := cfg.State.CommitOverrides[hash]
+			override, hasOverride := cfg.State.CommitOverrides[commitHash]
 			authorName, authorEmail, authorDate, subject, _ := getCommitDetails(cfg.TempDir, commitHash)
 
 			fmt.Printf("%s────────────────────────────────────────────────────────────────%s\n", Bold, NC)
@@ -69,13 +73,13 @@ func InteractiveEdit(cfg *config.Config) {
 			}
 
 			msgStatus := "(unchanged)"
-			if _, ok := cfg.State.CommitMessages[hash]; ok {
+			if _, ok := cfg.State.CommitMessages[commitHash]; ok {
 				msgStatus = fmt.Sprintf("%s(customized)%s", Yellow, NC)
 			}
 			fmt.Printf("    Message: %s\n", msgStatus)
 			fmt.Println()
 
-			choice := promptCommitChoice(commitHash, remainingCommits, hasOverride, cfg)
+			choice := promptCommitChoice(commitHash, remainingCommits, hasOverride, cfg, prompts)
 			if choice == "quit" {
 				return
 			}
@@ -143,14 +147,7 @@ func getCommitDetails(tmpDir string, hash string) (authorName, authorEmail, auth
 	return
 }
 
-func promptCommitChoice(commitHash string, remainingCommits []string, hasOverride bool, cfg *config.Config) string {
-	hash := plumbing.NewHash(commitHash)
-	prompts := NewPromptSession()
-	defer func() {
-		if err := prompts.Close(); err != nil {
-			cfg.Logger.Warning(err.Error())
-		}
-	}()
+func promptCommitChoice(commitHash string, remainingCommits []string, hasOverride bool, cfg *config.Config, prompts *PromptSession) string {
 
 	for {
 		if hasOverride {
@@ -193,7 +190,7 @@ func promptCommitChoice(commitHash string, remainingCommits []string, hasOverrid
 				customEmail = cfg.NewEmail
 			}
 
-			cfg.State.CommitOverrides[hash] = config.CommitOverride{
+			cfg.State.CommitOverrides[commitHash] = config.CommitOverride{
 				Name:  customName,
 				Email: customEmail,
 			}
@@ -212,7 +209,7 @@ func promptCommitChoice(commitHash string, remainingCommits []string, hasOverrid
 				return "quit"
 			}
 			if customMessage != "" {
-				cfg.State.CommitMessages[hash] = customMessage
+				cfg.State.CommitMessages[commitHash] = customMessage
 				cfg.Logger.Success("Custom message saved for commit " + commitHash[:12])
 			} else {
 				cfg.Logger.Info("Keeping original message for commit " + commitHash[:12])
@@ -225,7 +222,7 @@ func promptCommitChoice(commitHash string, remainingCommits []string, hasOverrid
 				if targetName == "" {
 					targetName = getCommitAuthorName(cfg.TempDir, commitHash)
 				}
-				cfg.State.CommitOverrides[hash] = config.CommitOverride{
+				cfg.State.CommitOverrides[commitHash] = config.CommitOverride{
 					Name:  targetName,
 					Email: cfg.NewEmail,
 				}
@@ -233,18 +230,17 @@ func promptCommitChoice(commitHash string, remainingCommits []string, hasOverrid
 			cfg.Logger.Success("Changes will be applied to commit " + commitHash[:12])
 			return "next"
 		case "S":
-			cfg.State.CommitOverrides[hash] = config.CommitOverride{Skip: true}
+			cfg.State.CommitOverrides[commitHash] = config.CommitOverride{Skip: true}
 			cfg.Logger.Info("Commit " + commitHash[:12] + " will be kept unchanged")
 			return "next"
 		case "D":
 			cfg.Logger.Info("Applying default changes to all remaining commits...")
 			for _, remainingHash := range remainingCommits {
-				h := plumbing.NewHash(remainingHash)
 				targetName := cfg.NewName
 				if targetName == "" {
 					targetName = getCommitAuthorName(cfg.TempDir, remainingHash)
 				}
-				cfg.State.CommitOverrides[h] = config.CommitOverride{
+				cfg.State.CommitOverrides[remainingHash] = config.CommitOverride{
 					Name:  targetName,
 					Email: cfg.NewEmail,
 				}

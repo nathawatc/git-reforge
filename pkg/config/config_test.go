@@ -2,8 +2,6 @@ package config
 
 import (
 	"testing"
-
-	"github.com/go-git/go-git/v5/plumbing"
 )
 
 func TestNew(t *testing.T) {
@@ -46,12 +44,12 @@ func TestCommitOverride(t *testing.T) {
 
 func TestInteractiveState(t *testing.T) {
 	state := &InteractiveState{
-		CommitOverrides: make(map[plumbing.Hash]CommitOverride),
-		CommitMessages:  make(map[plumbing.Hash]string),
-		CoauthorActions: make(map[plumbing.Hash]string),
+		CommitOverrides: make(map[string]CommitOverride),
+		CommitMessages:  make(map[string]string),
+		CoauthorActions: make(map[string]string),
 	}
 
-	hash := plumbing.NewHash("abc123def4560000000000000000000000000000")
+	hash := "abc123def4560000000000000000000000000000"
 	state.CommitOverrides[hash] = CommitOverride{Name: "Test", Email: "test@example.org"}
 	state.CommitMessages[hash] = "New message"
 	state.CoauthorActions[hash] = "rewrite"

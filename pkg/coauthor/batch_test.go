@@ -6,8 +6,6 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/go-git/go-git/v5/plumbing"
-
 	"github-to-codeberg/pkg/config"
 	"github-to-codeberg/pkg/shell"
 )
@@ -133,8 +131,7 @@ func TestApplyCoauthorActionAppliesAllRemaining(t *testing.T) {
 	applyCoauthorAction(commits, "rewrite", cfg)
 
 	for _, commit := range commits {
-		hash := plumbing.NewHash(commit)
-		if got := cfg.State.CoauthorActions[hash]; got != "rewrite" {
+		if got := cfg.State.CoauthorActions[commit]; got != "rewrite" {
 			t.Fatalf("CoauthorActions[%s] = %q want rewrite", commit, got)
 		}
 	}

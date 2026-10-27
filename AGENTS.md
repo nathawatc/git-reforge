@@ -84,9 +84,9 @@ pkg/
 
 Runtime choices from interactive mode live in `InteractiveState`, accessed via `cfg.State`:
 
-- `cfg.State.CommitOverrides map[plumbing.Hash]CommitOverride` — per-commit name/email/skip
-- `cfg.State.CommitMessages map[plumbing.Hash]string` — per-commit message overrides
-- `cfg.State.CoauthorActions map[plumbing.Hash]string` — coauthor rewrite/remove/skip decisions
+- `cfg.State.CommitOverrides map[string]CommitOverride` — per-commit name/email/skip
+- `cfg.State.CommitMessages map[string]string` — per-commit message overrides
+- `cfg.State.CoauthorActions map[string]string` — coauthor rewrite/remove/skip decisions
 
 ### Signing Modes
 

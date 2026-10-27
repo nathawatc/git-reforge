@@ -1,9 +1,5 @@
 package config
 
-import (
-	"github.com/go-git/go-git/v5/plumbing"
-)
-
 type Config struct {
 	SourceURL   string
 	DestURL     string
@@ -39,9 +35,9 @@ type Config struct {
 }
 
 type InteractiveState struct {
-	CommitOverrides map[plumbing.Hash]CommitOverride
-	CommitMessages  map[plumbing.Hash]string
-	CoauthorActions map[plumbing.Hash]string
+	CommitOverrides map[string]CommitOverride
+	CommitMessages  map[string]string
+	CoauthorActions map[string]string
 }
 
 type CommitOverride struct {
@@ -54,9 +50,9 @@ func New() *Config {
 	return &Config{
 		SignMode: "keep",
 		State: &InteractiveState{
-			CommitOverrides: make(map[plumbing.Hash]CommitOverride),
-			CommitMessages:  make(map[plumbing.Hash]string),
-			CoauthorActions: make(map[plumbing.Hash]string),
+			CommitOverrides: make(map[string]CommitOverride),
+			CommitMessages:  make(map[string]string),
+			CoauthorActions: make(map[string]string),
 		},
 	}
 }

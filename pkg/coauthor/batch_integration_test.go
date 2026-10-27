@@ -7,8 +7,6 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/go-git/go-git/v5/plumbing"
-
 	"github-to-codeberg/pkg/config"
 )
 
@@ -197,7 +195,7 @@ func TestRewriteInteractiveAppliesPerCommitCoauthorDecision(t *testing.T) {
 	cfg.CoauthorNewName = "New Co"
 	cfg.CoauthorNewEmail = "newco@example.org"
 	cfg.Logger = testLogger{}
-	cfg.State.CoauthorActions[plumbing.NewHash(hash)] = "rewrite"
+	cfg.State.CoauthorActions[hash] = "rewrite"
 
 	if err := RewriteInteractive(cfg); err != nil {
 		t.Fatalf("RewriteInteractive() error = %v", err)

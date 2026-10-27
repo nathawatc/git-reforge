@@ -7,8 +7,6 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/go-git/go-git/v5/plumbing"
-
 	"github-to-codeberg/pkg/config"
 )
 
@@ -167,7 +165,7 @@ func TestRewriteCommitsInteractivePreservesApostropheInAuthor(t *testing.T) {
 	cfg := config.New()
 	cfg.TempDir = tmpDir
 	cfg.Logger = testLogger{}
-	cfg.State.CommitOverrides[plumbing.NewHash(hashes[0])] = config.CommitOverride{
+	cfg.State.CommitOverrides[hashes[0]] = config.CommitOverride{
 		Name:  "O'Connor",
 		Email: "new@example.org",
 	}
@@ -214,7 +212,7 @@ func TestRewriteCommitsInteractiveRewritesCommitMessage(t *testing.T) {
 	cfg := config.New()
 	cfg.TempDir = tmpDir
 	cfg.Logger = testLogger{}
-	cfg.State.CommitMessages[plumbing.NewHash(hashes[0])] = "new subject\n\nnew body"
+	cfg.State.CommitMessages[hashes[0]] = "new subject\n\nnew body"
 
 	if err := RewriteCommitsInteractive(cfg); err != nil {
 		t.Fatalf("RewriteCommitsInteractive() error = %v", err)
@@ -254,7 +252,7 @@ func TestRewriteCommitsInteractivePreservesUntouchedCommitMessageTrailingNewline
 	cfg := config.New()
 	cfg.TempDir = tmpDir
 	cfg.Logger = testLogger{}
-	cfg.State.CommitMessages[plumbing.NewHash(secondHash)] = "Updated second"
+	cfg.State.CommitMessages[secondHash] = "Updated second"
 
 	if err := RewriteCommitsInteractive(cfg); err != nil {
 		t.Fatalf("RewriteCommitsInteractive() error = %v", err)

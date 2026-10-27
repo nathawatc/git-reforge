@@ -2,23 +2,15 @@ package logging
 
 import (
 	"fmt"
-	"log/slog"
-	"os"
 	"strings"
 
 	"github-to-codeberg/pkg/ui"
 )
 
-type Logger struct {
-	*slog.Logger
-}
+type Logger struct{}
 
 func New() *Logger {
-	opts := &slog.HandlerOptions{
-		Level: slog.LevelInfo,
-	}
-	handler := slog.NewJSONHandler(os.Stdout, opts)
-	return &Logger{slog.New(handler)}
+	return &Logger{}
 }
 
 func (l *Logger) log(color string, level string, msg string) {

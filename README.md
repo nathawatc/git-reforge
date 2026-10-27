@@ -24,7 +24,7 @@ Migrate repositories from GitHub to Codeberg with history rewriting.
 ## Requirements
 
 - Git
-- Go 1.21+
+- Go 1.24+
 - GPG (optional, for GPG signing)
 - SSH (optional, for SSH signing)
 - A GitHub account with repositories to migrate

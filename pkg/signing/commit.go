@@ -12,10 +12,6 @@ import (
 	"github-to-codeberg/pkg/shell"
 )
 
-func runCommand(cmd *exec.Cmd, description string) error {
-	return shell.RunCommand(cmd, description)
-}
-
 func HandleSigning(cfg *config.Config) error {
 	log := cfg.Logger
 
@@ -43,7 +39,7 @@ func handleNone(cfg *config.Config) error {
 	// Disable signing locally
 	cmd := exec.Command("git", "config", "gpg.sign", "false")
 	cmd.Dir = cfg.WorkDir()
-	if err := runCommand(cmd, "git config gpg.sign"); err != nil {
+	if err := shell.RunCommand(cmd, "git config gpg.sign"); err != nil {
 		return err
 	}
 
@@ -55,7 +51,7 @@ func handleNone(cfg *config.Config) error {
 export GIT_COMMITTER_DATE="$GIT_COMMITTER_DATE"
 `, "--tag-name-filter", "cat", "--", "--all")
 	cmd.Dir = cfg.WorkDir()
-	if err := runCommand(cmd, "filter-branch"); err != nil {
+	if err := shell.RunCommand(cmd, "filter-branch"); err != nil {
 		return err
 	}
 
@@ -75,20 +71,20 @@ func handleGPG(cfg *config.Config) error {
 
 	cmd := exec.Command("git", "config", "user.signingkey", cfg.GPGKey)
 	cmd.Dir = cfg.WorkDir()
-	if err := runCommand(cmd, "git config user.signingkey"); err != nil {
+	if err := shell.RunCommand(cmd, "git config user.signingkey"); err != nil {
 		return err
 	}
 
 	cmd = exec.Command("git", "config", "gpg.format", "openpgp")
 	cmd.Dir = cfg.WorkDir()
-	if err := runCommand(cmd, "git config gpg.format"); err != nil {
+	if err := shell.RunCommand(cmd, "git config gpg.format"); err != nil {
 		return err
 	}
 
 	commitFilter := fmt.Sprintf(`git -c gpg.format=openpgp commit-tree -S"%s" "$@"`, shell.EscapeDoubleQuoted(cfg.GPGKey))
 	cmd = exec.Command("git", "filter-branch", "-f", "--commit-filter", commitFilter, "--tag-name-filter", "cat", "--", "--all")
 	cmd.Dir = cfg.WorkDir()
-	if err := runCommand(cmd, "filter-branch"); err != nil {
+	if err := shell.RunCommand(cmd, "filter-branch"); err != nil {
 		return err
 	}
 
@@ -111,19 +107,19 @@ func handleSSH(cfg *config.Config) error {
 
 	cmd := exec.Command("git", "config", "gpg.format", "ssh")
 	cmd.Dir = cfg.WorkDir()
-	if err := runCommand(cmd, "git config gpg.format"); err != nil {
+	if err := shell.RunCommand(cmd, "git config gpg.format"); err != nil {
 		return err
 	}
 
 	cmd = exec.Command("git", "config", "user.signingkey", cfg.SSHKey)
 	cmd.Dir = cfg.WorkDir()
-	if err := runCommand(cmd, "git config user.signingkey"); err != nil {
+	if err := shell.RunCommand(cmd, "git config user.signingkey"); err != nil {
 		return err
 	}
 
 	cmd = exec.Command("git", "filter-branch", "-f", "--commit-filter", `git commit-tree -S "$@"`, "--tag-name-filter", "cat", "--", "--all")
 	cmd.Dir = cfg.WorkDir()
-	if err := runCommand(cmd, "filter-branch"); err != nil {
+	if err := shell.RunCommand(cmd, "filter-branch"); err != nil {
 		return err
 	}
 
@@ -337,7 +333,7 @@ func stripTag(cfg *config.Config, tagName string) error {
 	cmd := exec.Command("git", "tag", "-f", "-a", tagName, tagCommit, "-m", msg)
 	cmd.Dir = cfg.WorkDir()
 	cmd.Env = taggerEnv(cfg, tagger)
-	if err := runCommand(cmd, "git tag strip"); err != nil {
+	if err := shell.RunCommand(cmd, "git tag strip"); err != nil {
 		return err
 	}
 	return nil
@@ -362,7 +358,7 @@ func resignTagGPG(cfg *config.Config, tagName string) error {
 		"tag", "-f", "-s", tagName, "-u", cfg.GPGKey, tagCommit, "-m", msg)
 	cmd.Dir = cfg.WorkDir()
 	cmd.Env = taggerEnv(cfg, tagger)
-	if err := runCommand(cmd, "git tag resign GPG"); err != nil {
+	if err := shell.RunCommand(cmd, "git tag resign GPG"); err != nil {
 		return err
 	}
 	return nil
@@ -388,7 +384,7 @@ func resignTagSSH(cfg *config.Config, tagName string) error {
 		"tag", "-f", "-s", tagName, tagCommit, "-m", msg)
 	cmd.Dir = cfg.WorkDir()
 	cmd.Env = taggerEnv(cfg, tagger)
-	if err := runCommand(cmd, "git tag resign SSH"); err != nil {
+	if err := shell.RunCommand(cmd, "git tag resign SSH"); err != nil {
 		return err
 	}
 	return nil

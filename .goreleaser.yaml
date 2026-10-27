@@ -23,15 +23,12 @@ builds:
     goos:
       - linux
       - darwin
-      - windows
     goarch:
       - amd64
       - arm64
     ignore:
       - goos: darwin
         goarch: amd64
-      - goos: windows
-        goarch: arm64
 
 checksum:
   name_template: SHA256SUMS

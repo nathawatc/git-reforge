@@ -7,8 +7,6 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/go-git/go-git/v5/plumbing"
-
 	"github-to-codeberg/pkg/config"
 	"github-to-codeberg/pkg/shell"
 	"github-to-codeberg/pkg/ui"
@@ -102,15 +100,15 @@ func buildCoauthorMsgFilter(cfg *config.Config, outputPath string, modeType stri
 		for hash, action := range cfg.State.CoauthorActions {
 			switch action {
 			case "remove":
-				fmt.Fprintf(&script, "    %s)\n", hash.String())
+				fmt.Fprintf(&script, "    %s)\n", hash)
 				fmt.Fprintf(&script, "        sed -E %s\n", shell.QuoteSingle(fmt.Sprintf("/^%s$/d", sedMatchPattern)))
 				script.WriteString("        ;;\n")
 			case "rewrite":
-				fmt.Fprintf(&script, "    %s)\n", hash.String())
+				fmt.Fprintf(&script, "    %s)\n", hash)
 				fmt.Fprintf(&script, "        sed -E %s\n", shell.QuoteSingle(fmt.Sprintf("s/^%s$/%s/", sedMatchPattern, newTrailer)))
 				script.WriteString("        ;;\n")
 			default:
-				fmt.Fprintf(&script, "    %s)\n", hash.String())
+				fmt.Fprintf(&script, "    %s)\n", hash)
 				fmt.Fprintf(&script, "        cat\n")
 				script.WriteString("        ;;\n")
 			}
@@ -177,6 +175,13 @@ func InteractiveCoauthorEdit(cfg *config.Config) {
 	log.Info(fmt.Sprintf("Found %d commit(s) with matching Co-authored-by trailer(s)", len(matchingCommits)))
 	fmt.Println()
 
+	prompts := ui.NewPromptSession()
+	defer func() {
+		if err := prompts.Close(); err != nil {
+			log.Warning(err.Error())
+		}
+	}()
+
 	current := 0
 	for _, commitHash := range matchingCommits {
 		current++
@@ -196,12 +201,12 @@ func InteractiveCoauthorEdit(cfg *config.Config) {
 		}
 		fmt.Println()
 
-		if action, ok := cfg.State.CoauthorActions[plumbing.NewHash(commitHash)]; ok {
+		if action, ok := cfg.State.CoauthorActions[commitHash]; ok {
 			fmt.Printf("  %sCurrent decision:%s %s%s%s\n", ui.Cyan, ui.NC, ui.Bold, action, ui.NC)
 			fmt.Println()
 		}
 
-		choice := promptLoop(commitHash, matchingCommits[current-1:], cfg)
+		choice := promptLoop(commitHash, matchingCommits[current-1:], cfg, prompts)
 		if choice == "quit" {
 			return
 		}
@@ -277,14 +282,7 @@ func extractMatchingLines(body string, name string, email string) []string {
 	return matches
 }
 
-func promptLoop(commitHash string, remainingCommits []string, cfg *config.Config) string {
-	prompts := ui.NewPromptSession()
-	defer func() {
-		if err := prompts.Close(); err != nil {
-			cfg.Logger.Warning(err.Error())
-		}
-	}()
-
+func promptLoop(commitHash string, remainingCommits []string, cfg *config.Config, prompts *ui.PromptSession) string {
 	for {
 		fmt.Printf("  %s[R]ewrite%s - Replace trailer with new Co-authored-by\n", ui.Green, ui.NC)
 		fmt.Printf("  %s[D]elete%s  - Remove the matching trailer line(s)\n", ui.Red, ui.NC)
@@ -300,19 +298,17 @@ func promptLoop(commitHash string, remainingCommits []string, cfg *config.Config
 			return "quit"
 		}
 
-		hash := plumbing.NewHash(commitHash)
-
 		switch strings.ToUpper(choice) {
 		case "R":
-			cfg.State.CoauthorActions[hash] = "rewrite"
+			cfg.State.CoauthorActions[commitHash] = "rewrite"
 			cfg.Logger.Success("Will rewrite Co-authored-by trailer in commit " + commitHash[:12])
 			return ""
 		case "D":
-			cfg.State.CoauthorActions[hash] = "remove"
+			cfg.State.CoauthorActions[commitHash] = "remove"
 			cfg.Logger.Success("Will remove Co-authored-by trailer from commit " + commitHash[:12])
 			return ""
 		case "S":
-			cfg.State.CoauthorActions[hash] = "skip"
+			cfg.State.CoauthorActions[commitHash] = "skip"
 			cfg.Logger.Info("Commit " + commitHash[:12] + " will be left unchanged")
 			return ""
 		case "RA":
@@ -337,6 +333,6 @@ func applyCoauthorAction(commitHashes []string, action string, cfg *config.Confi
 		if commitHash == "" {
 			continue
 		}
-		cfg.State.CoauthorActions[plumbing.NewHash(commitHash)] = action
+		cfg.State.CoauthorActions[commitHash] = action
 	}
 }
