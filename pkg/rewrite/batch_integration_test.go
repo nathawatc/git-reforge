@@ -226,6 +226,48 @@ func TestRewriteCommitsInteractiveRewritesCommitMessage(t *testing.T) {
 	}
 }
 
+func TestRewriteCommitsInteractivePreservesUntouchedCommitMessageTrailingNewline(t *testing.T) {
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skip("git not available")
+	}
+
+	tmpDir := t.TempDir()
+	workDir := filepath.Join(tmpDir, "working")
+	if err := os.Mkdir(workDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+
+	runGit(t, workDir, "init")
+	runGit(t, workDir, "config", "user.name", "Test User")
+	runGit(t, workDir, "config", "user.email", "test@example.org")
+
+	writeFile(t, filepath.Join(workDir, "f1.txt"), "1\n")
+	runGit(t, workDir, "add", "f1.txt")
+	runGit(t, workDir, "commit", "-m", "First commit\n\nSome details\n")
+	firstHash := strings.TrimSpace(runGitOutput(t, workDir, "rev-parse", "HEAD"))
+
+	writeFile(t, filepath.Join(workDir, "f2.txt"), "2\n")
+	runGit(t, workDir, "add", "f2.txt")
+	runGit(t, workDir, "commit", "-m", "Second commit")
+	secondHash := strings.TrimSpace(runGitOutput(t, workDir, "rev-parse", "HEAD"))
+
+	cfg := config.New()
+	cfg.TempDir = tmpDir
+	cfg.Logger = testLogger{}
+	cfg.State.CommitMessages[plumbing.NewHash(secondHash)] = "Updated second"
+
+	if err := RewriteCommitsInteractive(cfg); err != nil {
+		t.Fatalf("RewriteCommitsInteractive() error = %v", err)
+	}
+
+	// Verify the untouched first commit preserved its exact body and trailing newline
+	firstMsg := runGitOutput(t, workDir, "log", firstHash, "-1", "--format=%B")
+	wantFirst := "First commit\n\nSome details\n\n"
+	if firstMsg != wantFirst {
+		t.Fatalf("untouched commit message = %q want %q", firstMsg, wantFirst)
+	}
+}
+
 func TestRewriteCommitsBatchPreservesAuthorNameWhenNewNameEmpty(t *testing.T) {
 	if _, err := exec.LookPath("git"); err != nil {
 		t.Skip("git not available")

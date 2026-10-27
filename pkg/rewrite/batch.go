@@ -168,12 +168,14 @@ func generateMessageFilter(cfg *config.Config) (string, error) {
 	scriptPath := filepath.Join(cfg.TempDir, "msg_filter.sh")
 
 	var script strings.Builder
-	script.WriteString("#!/usr/bin/env bash\n")
-	script.WriteString("original_msg=$(cat)\n")
+	script.WriteString("#!/usr/bin/env sh\n")
 
 	if len(cfg.State.CommitMessages) > 0 {
 		script.WriteString("case \"$GIT_COMMIT\" in\n")
 		for hash, msg := range cfg.State.CommitMessages {
+			if !strings.HasSuffix(msg, "\n") {
+				msg += "\n"
+			}
 			// Write message to sidecar file
 			msgFile := filepath.Join(cfg.TempDir, "msg_"+hash.String()+".txt")
 			if err := os.WriteFile(msgFile, []byte(msg), 0644); err != nil {
@@ -181,9 +183,9 @@ func generateMessageFilter(cfg *config.Config) (string, error) {
 			}
 			fmt.Fprintf(&script, "    %s)\n        cat %s\n        ;;\n", hash.String(), shell.QuoteSingle(msgFile))
 		}
-		script.WriteString("    *)\n        printf '%s' \"$original_msg\"\n        ;;\nesac\n")
+		script.WriteString("    *)\n        cat\n        ;;\nesac\n")
 	} else {
-		script.WriteString("printf '%s' \"$original_msg\"\n")
+		script.WriteString("cat\n")
 	}
 
 	if err := os.WriteFile(scriptPath, []byte(script.String()), 0755); err != nil {

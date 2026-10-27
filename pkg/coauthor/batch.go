@@ -76,8 +76,7 @@ func buildCoauthorMsgFilter(cfg *config.Config, outputPath string, modeType stri
 
 	var script strings.Builder
 
-	script.WriteString("#!/usr/bin/env bash\n")
-	script.WriteString("input=$(cat)\n")
+	script.WriteString("#!/usr/bin/env sh\n")
 
 	sedEscapedName := shell.EscapeSed(cfg.CoauthorOldName)
 	var sedMatchPattern string
@@ -94,9 +93,9 @@ func buildCoauthorMsgFilter(cfg *config.Config, outputPath string, modeType stri
 
 	if modeType == "batch" {
 		if cfg.CoauthorMode == "remove" {
-			fmt.Fprintf(&script, "printf '%%s' \"$input\" | sed -E %s\n", shell.QuoteSingle(fmt.Sprintf("/^%s$/d", sedMatchPattern)))
+			fmt.Fprintf(&script, "sed -E %s\n", shell.QuoteSingle(fmt.Sprintf("/^%s$/d", sedMatchPattern)))
 		} else {
-			fmt.Fprintf(&script, "printf '%%s' \"$input\" | sed -E %s\n", shell.QuoteSingle(fmt.Sprintf("s/^%s$/%s/", sedMatchPattern, newTrailer)))
+			fmt.Fprintf(&script, "sed -E %s\n", shell.QuoteSingle(fmt.Sprintf("s/^%s$/%s/", sedMatchPattern, newTrailer)))
 		}
 	} else {
 		script.WriteString("case \"$GIT_COMMIT\" in\n")
@@ -104,20 +103,20 @@ func buildCoauthorMsgFilter(cfg *config.Config, outputPath string, modeType stri
 			switch action {
 			case "remove":
 				fmt.Fprintf(&script, "    %s)\n", hash.String())
-				fmt.Fprintf(&script, "        printf '%%s' \"$input\" | sed -E %s\n", shell.QuoteSingle(fmt.Sprintf("/^%s$/d", sedMatchPattern)))
+				fmt.Fprintf(&script, "        sed -E %s\n", shell.QuoteSingle(fmt.Sprintf("/^%s$/d", sedMatchPattern)))
 				script.WriteString("        ;;\n")
 			case "rewrite":
 				fmt.Fprintf(&script, "    %s)\n", hash.String())
-				fmt.Fprintf(&script, "        printf '%%s' \"$input\" | sed -E %s\n", shell.QuoteSingle(fmt.Sprintf("s/^%s$/%s/", sedMatchPattern, newTrailer)))
+				fmt.Fprintf(&script, "        sed -E %s\n", shell.QuoteSingle(fmt.Sprintf("s/^%s$/%s/", sedMatchPattern, newTrailer)))
 				script.WriteString("        ;;\n")
 			default:
 				fmt.Fprintf(&script, "    %s)\n", hash.String())
-				fmt.Fprintf(&script, "        printf '%%s' \"$input\"\n")
+				fmt.Fprintf(&script, "        cat\n")
 				script.WriteString("        ;;\n")
 			}
 		}
 		script.WriteString("    *)\n")
-		script.WriteString("        printf '%%s' \"$input\"\n")
+		script.WriteString("        cat\n")
 		script.WriteString("        ;;\nesac\n")
 	}
 
