@@ -147,8 +147,15 @@ func InteractiveCoauthorEdit(cfg *config.Config) {
 
 	log.Info("Scanning all commits for Co-authored-by trailers matching: " + cfg.CoauthorOldName)
 
-	// Get all commits and filter
-	cmd := exec.Command("git", "log", "--all", "--format=%H")
+	pattern := "Co-authored-by: " + cfg.CoauthorOldName
+	if cfg.CoauthorOldEmail != "" {
+		pattern += " <" + cfg.CoauthorOldEmail + ">"
+	} else {
+		pattern += " "
+	}
+
+	// Fast pre-filter using Git grep
+	cmd := exec.Command("git", "log", "--all", "-F", "--grep="+pattern, "--format=%H")
 	cmd.Dir = cfg.WorkDir()
 	output, err := cmd.Output()
 	if err != nil {
@@ -158,6 +165,7 @@ func InteractiveCoauthorEdit(cfg *config.Config) {
 
 	var matchingCommits []string
 	for commitHash := range strings.SplitSeq(string(output), "\n") {
+		commitHash = strings.TrimSpace(commitHash)
 		if commitHash == "" {
 			continue
 		}
@@ -225,34 +233,19 @@ func getCommitBody(tmpDir string, hash string) string {
 }
 
 func getCommitDetails(tmpDir string, hash string) (authorName, authorDate, subject, body string) {
-	cmd := exec.Command("git", "log", "-1", "--format=%an", hash)
+	cmd := exec.Command("git", "log", "-1", "--format=%an%x00%ai%x00%s%x00%B", hash)
 	cmd.Dir = tmpDir + "/working"
 	output, err := cmd.Output()
-	if err == nil {
-		authorName = strings.TrimSpace(string(output))
+	if err != nil {
+		return
 	}
-
-	cmd = exec.Command("git", "log", "-1", "--format=%ai", hash)
-	cmd.Dir = tmpDir + "/working"
-	output, err = cmd.Output()
-	if err == nil {
-		authorDate = strings.TrimSpace(string(output))
+	parts := strings.SplitN(string(output), "\x00", 4)
+	if len(parts) >= 4 {
+		authorName = strings.TrimSpace(parts[0])
+		authorDate = strings.TrimSpace(parts[1])
+		subject = strings.TrimSpace(parts[2])
+		body = parts[3]
 	}
-
-	cmd = exec.Command("git", "log", "-1", "--format=%s", hash)
-	cmd.Dir = tmpDir + "/working"
-	output, err = cmd.Output()
-	if err == nil {
-		subject = strings.TrimSpace(string(output))
-	}
-
-	cmd = exec.Command("git", "log", "-1", "--format=%B", hash)
-	cmd.Dir = tmpDir + "/working"
-	output, err = cmd.Output()
-	if err == nil {
-		body = string(output)
-	}
-
 	return
 }
 

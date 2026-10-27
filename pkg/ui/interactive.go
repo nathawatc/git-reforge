@@ -119,31 +119,20 @@ func getCommitsByLogFilter(tmpDir string, filter string) []string {
 }
 
 func getCommitDetails(tmpDir string, hash string) (authorName, authorEmail, authorDate, subject, body string) {
-	cmd := exec.Command("git", "log", "-1", "--format=%an", hash)
+	cmd := exec.Command("git", "log", "-1", "--format=%an%x00%ae%x00%ai%x00%s%x00%B", hash)
 	cmd.Dir = tmpDir + "/working"
-	output, _ := cmd.Output()
-	authorName = strings.TrimSpace(string(output))
-
-	cmd = exec.Command("git", "log", "-1", "--format=%ae", hash)
-	cmd.Dir = tmpDir + "/working"
-	output, _ = cmd.Output()
-	authorEmail = strings.TrimSpace(string(output))
-
-	cmd = exec.Command("git", "log", "-1", "--format=%ai", hash)
-	cmd.Dir = tmpDir + "/working"
-	output, _ = cmd.Output()
-	authorDate = strings.TrimSpace(string(output))
-
-	cmd = exec.Command("git", "log", "-1", "--format=%s", hash)
-	cmd.Dir = tmpDir + "/working"
-	output, _ = cmd.Output()
-	subject = strings.TrimSpace(string(output))
-
-	cmd = exec.Command("git", "log", "-1", "--format=%B", hash)
-	cmd.Dir = tmpDir + "/working"
-	output, _ = cmd.Output()
-	body = string(output)
-
+	output, err := cmd.Output()
+	if err != nil {
+		return
+	}
+	parts := strings.SplitN(string(output), "\x00", 5)
+	if len(parts) >= 5 {
+		authorName = strings.TrimSpace(parts[0])
+		authorEmail = strings.TrimSpace(parts[1])
+		authorDate = strings.TrimSpace(parts[2])
+		subject = strings.TrimSpace(parts[3])
+		body = parts[4]
+	}
 	return
 }
 
