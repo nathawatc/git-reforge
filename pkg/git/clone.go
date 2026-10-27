@@ -200,12 +200,15 @@ func pushBranches(tmpDir string) error {
 	if err != nil {
 		return err
 	}
-	for _, refspec := range refspecs {
-		cmd := exec.Command("git", "push", "--force", "origin", refspec)
-		cmd.Dir = workDir
-		if err := shell.RunCommand(cmd, "push branch "+refspec); err != nil {
-			return fmt.Errorf("failed to push branch %s: %w", refspec, err)
-		}
+	if len(refspecs) == 0 {
+		return nil
+	}
+
+	args := append([]string{"push", "--force", "origin"}, refspecs...)
+	cmd := exec.Command("git", args...)
+	cmd.Dir = workDir
+	if err := shell.RunCommand(cmd, "push branches"); err != nil {
+		return fmt.Errorf("failed to push branches: %w", err)
 	}
 
 	return nil

@@ -334,6 +334,51 @@ func TestBranchRefspecsPrefersLocalBranches(t *testing.T) {
 	}
 }
 
+func TestPushBranchesPushesMultipleBranches(t *testing.T) {
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skip("git not available")
+	}
+
+	root := t.TempDir()
+	destDir := filepath.Join(root, "dest.git")
+	runGit(t, root, "init", "--bare", destDir)
+
+	workDir := filepath.Join(root, "working")
+	if err := os.Mkdir(workDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	runGit(t, workDir, "init")
+	runGit(t, workDir, "config", "user.name", "Test User")
+	runGit(t, workDir, "config", "user.email", "test@example.org")
+	runGit(t, workDir, "remote", "add", "origin", destDir)
+
+	writeFile(t, filepath.Join(workDir, "f1.txt"), "main\n")
+	runGit(t, workDir, "add", "f1.txt")
+	runGit(t, workDir, "commit", "-m", "main commit")
+	runGit(t, workDir, "branch", "-M", "main")
+
+	runGit(t, workDir, "checkout", "-b", "feature-a")
+	writeFile(t, filepath.Join(workDir, "f2.txt"), "a\n")
+	runGit(t, workDir, "add", "f2.txt")
+	runGit(t, workDir, "commit", "-m", "feature-a commit")
+
+	runGit(t, workDir, "checkout", "-b", "feature-b")
+	writeFile(t, filepath.Join(workDir, "f3.txt"), "b\n")
+	runGit(t, workDir, "add", "f3.txt")
+	runGit(t, workDir, "commit", "-m", "feature-b commit")
+
+	if err := pushBranches(root); err != nil {
+		t.Fatalf("pushBranches() error = %v", err)
+	}
+
+	remoteBranches := runGitOutput(t, destDir, "for-each-ref", "--format=%(refname)", "refs/heads")
+	for _, want := range []string{"refs/heads/main", "refs/heads/feature-a", "refs/heads/feature-b"} {
+		if !strings.Contains(remoteBranches, want) {
+			t.Fatalf("remote branches %q missing %q", remoteBranches, want)
+		}
+	}
+}
+
 func writeFile(t *testing.T, path string, contents string) {
 	t.Helper()
 	if err := os.WriteFile(path, []byte(contents), 0644); err != nil {
