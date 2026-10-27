@@ -32,8 +32,8 @@ func RewriteBatch(cfg *config.Config) error {
 		"--msg-filter", "bash "+shell.QuoteSingle(coauthorMsgFilter),
 		"--tag-name-filter", "cat", "--", "--all")
 	cmd.Dir = cfg.WorkDir()
-	if err := cmd.Run(); err != nil {
-		return fmt.Errorf("filter-branch failed: %w", err)
+	if err := shell.RunCommand(cmd, "filter-branch"); err != nil {
+		return err
 	}
 
 	log.Success("Co-authored-by trailers updated")
@@ -61,8 +61,8 @@ func RewriteInteractive(cfg *config.Config) error {
 		"--msg-filter", "bash "+shell.QuoteSingle(coauthorMsgFilter),
 		"--tag-name-filter", "cat", "--", "--all")
 	cmd.Dir = cfg.WorkDir()
-	if err := cmd.Run(); err != nil {
-		return fmt.Errorf("filter-branch failed: %w", err)
+	if err := shell.RunCommand(cmd, "filter-branch"); err != nil {
+		return err
 	}
 
 	log.Success("Co-authored-by trailers updated (interactive)")

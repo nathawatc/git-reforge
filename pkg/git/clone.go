@@ -12,6 +12,7 @@ import (
 	"strings"
 
 	"github-to-codeberg/pkg/config"
+	"github-to-codeberg/pkg/shell"
 )
 
 func Clone(cfg *config.Config) error {
@@ -39,7 +40,7 @@ func Clone(cfg *config.Config) error {
 	// Clone as bare mirror
 	log.Info("Cloning as bare mirror...")
 	cmd := exec.Command("git", "clone", "--mirror", cfg.SourceURL, tmpDir+"/repo.git")
-	if err := cmd.Run(); err != nil {
+	if err := shell.RunCommand(cmd, "git clone mirror"); err != nil {
 		return fmt.Errorf("failed to clone repository: %w", err)
 	}
 
@@ -58,14 +59,14 @@ func Clone(cfg *config.Config) error {
 func convertBareToWorking(tmpDir string) error {
 	// Use git clone to convert bare to working
 	cmd := exec.Command("git", "clone", tmpDir+"/repo.git", tmpDir+"/working")
-	if err := cmd.Run(); err != nil {
+	if err := shell.RunCommand(cmd, "git clone working"); err != nil {
 		return fmt.Errorf("git clone failed: %w", err)
 	}
 
 	// Fetch all refs
 	cmd = exec.Command("git", "fetch", "--all")
 	cmd.Dir = tmpDir + "/working"
-	if err := cmd.Run(); err != nil {
+	if err := shell.RunCommand(cmd, "git fetch"); err != nil {
 		return fmt.Errorf("git fetch failed: %w", err)
 	}
 
@@ -98,7 +99,7 @@ func createLocalBranchesFromOrigin(workDir string) error {
 		}
 		cmd := exec.Command("git", "branch", "--force", branchName, ref)
 		cmd.Dir = workDir
-		if err := cmd.Run(); err != nil {
+		if err := shell.RunCommand(cmd, "create branch "+branchName); err != nil {
 			return fmt.Errorf("failed to create local branch %s from %s: %w", branchName, ref, err)
 		}
 	}
@@ -125,7 +126,7 @@ func checkoutFirstAvailableBranch(workDir string) error {
 	}
 	cmd := exec.Command("git", "checkout", branchName)
 	cmd.Dir = workDir
-	if err := cmd.Run(); err != nil {
+	if err := shell.RunCommand(cmd, "checkout branch "+branchName); err != nil {
 		return fmt.Errorf("failed to check out local branch %s: %w", branchName, err)
 	}
 	return nil
@@ -165,7 +166,7 @@ func Push(cfg *config.Config) error {
 
 	cmd := exec.Command("git", "remote", "set-url", "origin", destURL)
 	cmd.Dir = tmpDir + "/working"
-	if err := cmd.Run(); err != nil {
+	if err := shell.RunCommand(cmd, "set remote origin URL"); err != nil {
 		return fmt.Errorf("failed to set remote URL: %w", err)
 	}
 
@@ -198,7 +199,7 @@ func pushBranches(tmpDir string) error {
 	for _, refspec := range refspecs {
 		cmd := exec.Command("git", "push", "--force", "origin", refspec)
 		cmd.Dir = workDir
-		if err := cmd.Run(); err != nil {
+		if err := shell.RunCommand(cmd, "push branch "+refspec); err != nil {
 			return fmt.Errorf("failed to push branch %s: %w", refspec, err)
 		}
 	}
@@ -219,7 +220,7 @@ func pushTags(tmpDir string) error {
 
 	cmd := exec.Command("git", "push", "--force", "origin", "refs/tags/*:refs/tags/*")
 	cmd.Dir = workDir
-	if err := cmd.Run(); err != nil {
+	if err := shell.RunCommand(cmd, "push tags"); err != nil {
 		return fmt.Errorf("failed to push tags: %w", err)
 	}
 	return nil

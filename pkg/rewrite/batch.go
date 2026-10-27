@@ -11,17 +11,6 @@ import (
 	"github-to-codeberg/pkg/shell"
 )
 
-func runCommand(cmd *exec.Cmd, description string) error {
-	output, err := cmd.CombinedOutput()
-	if err != nil {
-		if len(output) > 0 {
-			return fmt.Errorf("%s failed: %w\n%s", description, err, output)
-		}
-		return fmt.Errorf("%s failed: %w", description, err)
-	}
-	return nil
-}
-
 func RewriteCommitsBatch(cfg *config.Config) error {
 	log := cfg.Logger
 	log.Header("Rewriting Commit History")
@@ -79,7 +68,7 @@ esac
 		"FILTER_NEW_NAME="+cfg.NewName,
 		"FILTER_NEW_EMAIL="+cfg.NewEmail,
 	)
-	if err := runCommand(cmd, "filter-branch"); err != nil {
+	if err := shell.RunCommand(cmd, "filter-branch"); err != nil {
 		return err
 	}
 
@@ -128,7 +117,7 @@ func RewriteCommitsInteractive(cfg *config.Config) error {
 
 	cmd := exec.Command(args[0], args[1:]...)
 	cmd.Dir = cfg.WorkDir()
-	if err := runCommand(cmd, "filter-branch"); err != nil {
+	if err := shell.RunCommand(cmd, "filter-branch"); err != nil {
 		return err
 	}
 

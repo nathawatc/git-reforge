@@ -13,14 +13,7 @@ import (
 )
 
 func runCommand(cmd *exec.Cmd, description string) error {
-	output, err := cmd.CombinedOutput()
-	if err != nil {
-		if len(output) > 0 {
-			return fmt.Errorf("%s failed: %w\n%s", description, err, output)
-		}
-		return fmt.Errorf("%s failed: %w", description, err)
-	}
-	return nil
+	return shell.RunCommand(cmd, description)
 }
 
 func HandleSigning(cfg *config.Config) error {
@@ -344,8 +337,8 @@ func stripTag(cfg *config.Config, tagName string) error {
 	cmd := exec.Command("git", "tag", "-f", "-a", tagName, tagCommit, "-m", msg)
 	cmd.Dir = cfg.WorkDir()
 	cmd.Env = taggerEnv(cfg, tagger)
-	if err := cmd.Run(); err != nil {
-		return fmt.Errorf("git tag strip failed: %w", err)
+	if err := runCommand(cmd, "git tag strip"); err != nil {
+		return err
 	}
 	return nil
 }
@@ -369,8 +362,8 @@ func resignTagGPG(cfg *config.Config, tagName string) error {
 		"tag", "-f", "-s", tagName, "-u", cfg.GPGKey, tagCommit, "-m", msg)
 	cmd.Dir = cfg.WorkDir()
 	cmd.Env = taggerEnv(cfg, tagger)
-	if err := cmd.Run(); err != nil {
-		return fmt.Errorf("git tag resign GPG failed: %w", err)
+	if err := runCommand(cmd, "git tag resign GPG"); err != nil {
+		return err
 	}
 	return nil
 }
@@ -395,8 +388,8 @@ func resignTagSSH(cfg *config.Config, tagName string) error {
 		"tag", "-f", "-s", tagName, tagCommit, "-m", msg)
 	cmd.Dir = cfg.WorkDir()
 	cmd.Env = taggerEnv(cfg, tagger)
-	if err := cmd.Run(); err != nil {
-		return fmt.Errorf("git tag resign SSH failed: %w", err)
+	if err := runCommand(cmd, "git tag resign SSH"); err != nil {
+		return err
 	}
 	return nil
 }
