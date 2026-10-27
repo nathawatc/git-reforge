@@ -10,6 +10,9 @@ func TestNew(t *testing.T) {
 	if cfg.SignMode != "keep" {
 		t.Errorf("SignMode = %q want %q", cfg.SignMode, "keep")
 	}
+	if cfg.Logger == nil {
+		t.Fatal("Logger is nil")
+	}
 	if cfg.State == nil {
 		t.Fatal("State is nil")
 	}

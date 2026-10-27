@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github-to-codeberg/pkg/config"
+	"github-to-codeberg/pkg/git"
 	"github-to-codeberg/pkg/shell"
 	"github-to-codeberg/pkg/ui"
 )
@@ -284,8 +285,8 @@ func InteractiveCoauthorEdit(cfg *config.Config) {
 		if commitHash == "" {
 			continue
 		}
-		body := getCommitBody(cfg.TempDir, commitHash)
-		if matchesCoauthor(body, cfg.CoauthorOldName, cfg.CoauthorOldEmail) {
+		info, err := git.CommitDetails(cfg.WorkDir(), commitHash)
+		if err == nil && matchesCoauthor(info.Body, cfg.CoauthorOldName, cfg.CoauthorOldEmail) {
 			matchingCommits = append(matchingCommits, commitHash)
 		}
 	}
@@ -308,16 +309,16 @@ func InteractiveCoauthorEdit(cfg *config.Config) {
 	current := 0
 	for _, commitHash := range matchingCommits {
 		current++
-		authorName, authorDate, subject, body := getCommitDetails(cfg.TempDir, commitHash)
-		matchingLines := extractMatchingLines(body, cfg.CoauthorOldName, cfg.CoauthorOldEmail)
+		info, _ := git.CommitDetails(cfg.WorkDir(), commitHash)
+		matchingLines := extractMatchingLines(info.Body, cfg.CoauthorOldName, cfg.CoauthorOldEmail)
 
 		fmt.Printf("%s────────────────────────────────────────────────────────────────%s\n", ui.Bold, ui.NC)
 		fmt.Printf("%sCo-author commit %d of %d%s\n", ui.Bold, current, len(matchingCommits), ui.NC)
 		fmt.Printf("%s────────────────────────────────────────────────────────────────%s\n", ui.Bold, ui.NC)
 		fmt.Printf("  %sHash:%s    %s\n", ui.Cyan, ui.NC, commitHash[:12])
-		fmt.Printf("  %sAuthor:%s  %s\n", ui.Cyan, ui.NC, authorName)
-		fmt.Printf("  %sDate:%s    %s\n", ui.Cyan, ui.NC, authorDate)
-		fmt.Printf("  %sSubject:%s %s\n", ui.Cyan, ui.NC, subject)
+		fmt.Printf("  %sAuthor:%s  %s\n", ui.Cyan, ui.NC, info.AuthorName)
+		fmt.Printf("  %sDate:%s    %s\n", ui.Cyan, ui.NC, info.AuthorDate)
+		fmt.Printf("  %sSubject:%s %s\n", ui.Cyan, ui.NC, info.Subject)
 		fmt.Printf("  %sMatching trailer(s):%s\n", ui.Cyan, ui.NC)
 		for _, line := range matchingLines {
 			fmt.Printf("    %s%s%s\n", ui.Yellow, line, ui.NC)
@@ -335,33 +336,6 @@ func InteractiveCoauthorEdit(cfg *config.Config) {
 		}
 		fmt.Println()
 	}
-}
-
-func getCommitBody(tmpDir string, hash string) string {
-	cmd := exec.Command("git", "log", "-1", "--format=%B", hash)
-	cmd.Dir = tmpDir + "/working"
-	output, err := cmd.Output()
-	if err != nil {
-		return ""
-	}
-	return string(output)
-}
-
-func getCommitDetails(tmpDir string, hash string) (authorName, authorDate, subject, body string) {
-	cmd := exec.Command("git", "log", "-1", "--format=%an%x00%ai%x00%s%x00%B", hash)
-	cmd.Dir = tmpDir + "/working"
-	output, err := cmd.Output()
-	if err != nil {
-		return
-	}
-	parts := strings.SplitN(string(output), "\x00", 4)
-	if len(parts) >= 4 {
-		authorName = strings.TrimSpace(parts[0])
-		authorDate = strings.TrimSpace(parts[1])
-		subject = strings.TrimSpace(parts[2])
-		body = parts[3]
-	}
-	return
 }
 
 func matchesCoauthor(body string, name string, email string) bool {

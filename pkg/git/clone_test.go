@@ -187,16 +187,16 @@ func TestPushSkipsTagPushWhenRepositoryHasNoTags(t *testing.T) {
 	runGit(t, seedDir, "commit", "-m", "feature")
 	runGit(t, seedDir, "push", "origin", "feature")
 
-	runGit(t, tmpDir, "clone", "--mirror", sourceDir, filepath.Join(tmpDir, "repo.git"))
-	if err := convertBareToWorking(tmpDir); err != nil {
-		t.Fatalf("convertBareToWorking() error = %v", err)
-	}
-	runGit(t, tmpDir, "init", "--bare", destDir)
-
 	cfg := config.New()
-	cfg.TempDir = tmpDir
+	cfg.SourceURL = sourceDir
 	cfg.DestURL = destDir
 	cfg.Logger = testLogger{}
+
+	if err := Clone(cfg); err != nil {
+		t.Fatalf("Clone() error = %v", err)
+	}
+	t.Cleanup(func() { _ = os.RemoveAll(cfg.TempDir) })
+	runGit(t, tmpDir, "init", "--bare", destDir)
 
 	if err := Push(cfg); err != nil {
 		t.Fatalf("Push() error = %v", err)
@@ -418,6 +418,41 @@ func TestPushBranchesPushesMultipleBranches(t *testing.T) {
 		if !strings.Contains(remoteBranches, want) {
 			t.Fatalf("remote branches %q missing %q", remoteBranches, want)
 		}
+	}
+}
+
+func TestCommitDetailsExtractsAllFields(t *testing.T) {
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skip("git not available")
+	}
+
+	workDir := filepath.Join(t.TempDir(), "repo")
+	if err := os.Mkdir(workDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	runGit(t, workDir, "init")
+	runGit(t, workDir, "config", "user.name", "Commit Author")
+	runGit(t, workDir, "config", "user.email", "author@example.org")
+	writeFile(t, filepath.Join(workDir, "f.txt"), "hello\n")
+	runGit(t, workDir, "add", "f.txt")
+	runGit(t, workDir, "commit", "-m", "Subject Line\n\nBody line 1\nBody line 2\n")
+	head := strings.TrimSpace(runGitOutput(t, workDir, "rev-parse", "HEAD"))
+
+	info, err := CommitDetails(workDir, head)
+	if err != nil {
+		t.Fatalf("CommitDetails() error = %v", err)
+	}
+	if info.AuthorName != "Commit Author" {
+		t.Errorf("AuthorName = %q want 'Commit Author'", info.AuthorName)
+	}
+	if info.AuthorEmail != "author@example.org" {
+		t.Errorf("AuthorEmail = %q want 'author@example.org'", info.AuthorEmail)
+	}
+	if info.Subject != "Subject Line" {
+		t.Errorf("Subject = %q want 'Subject Line'", info.Subject)
+	}
+	if !strings.Contains(info.Body, "Body line 1") {
+		t.Errorf("Body = %q want to contain 'Body line 1'", info.Body)
 	}
 }
 

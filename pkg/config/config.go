@@ -26,14 +26,24 @@ type Config struct {
 
 	// Internal
 	TempDir string
-	Logger  interface {
-		Header(msg string)
-		Info(msg string)
-		Success(msg string)
-		Warning(msg string)
-		Error(msg string)
-	}
+	Logger  Logger
 }
+
+type Logger interface {
+	Header(msg string)
+	Info(msg string)
+	Success(msg string)
+	Warning(msg string)
+	Error(msg string)
+}
+
+type nopLogger struct{}
+
+func (nopLogger) Header(string)  {}
+func (nopLogger) Info(string)    {}
+func (nopLogger) Success(string) {}
+func (nopLogger) Warning(string) {}
+func (nopLogger) Error(string)   {}
 
 type InteractiveState struct {
 	CommitOverrides map[string]CommitOverride
@@ -50,6 +60,7 @@ type CommitOverride struct {
 func New() *Config {
 	return &Config{
 		SignMode: "keep",
+		Logger:   nopLogger{},
 		State: &InteractiveState{
 			CommitOverrides: make(map[string]CommitOverride),
 			CommitMessages:  make(map[string]string),

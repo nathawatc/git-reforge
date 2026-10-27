@@ -56,28 +56,33 @@ func Clone(cfg *config.Config) error {
 	return nil
 }
 
-func convertBareToWorking(tmpDir string) error {
-	// Use git clone to convert bare to working
-	cmd := exec.Command("git", "clone", tmpDir+"/repo.git", tmpDir+"/working")
-	if err := shell.RunCommand(cmd, "git clone working"); err != nil {
-		return fmt.Errorf("git clone failed: %w", err)
-	}
+type CommitInfo struct {
+	Hash        string
+	AuthorName  string
+	AuthorEmail string
+	AuthorDate  string
+	Subject     string
+	Body        string
+}
 
-	// Fetch all refs
-	cmd = exec.Command("git", "fetch", "--all")
-	cmd.Dir = tmpDir + "/working"
-	if err := shell.RunCommand(cmd, "git fetch"); err != nil {
-		return fmt.Errorf("git fetch failed: %w", err)
+// CommitDetails extracts metadata for a single commit
+func CommitDetails(workDir string, hash string) (CommitInfo, error) {
+	cmd := exec.Command("git", "log", "-1", "--format=%an%x00%ae%x00%ai%x00%s%x00%B", hash)
+	cmd.Dir = workDir
+	output, err := cmd.Output()
+	if err != nil {
+		return CommitInfo{Hash: hash}, fmt.Errorf("git log failed for commit %s: %w", hash, err)
 	}
-
-	if err := createLocalBranchesFromOrigin(tmpDir + "/working"); err != nil {
-		return err
+	parts := strings.SplitN(string(output), "\x00", 5)
+	info := CommitInfo{Hash: hash}
+	if len(parts) >= 5 {
+		info.AuthorName = strings.TrimSpace(parts[0])
+		info.AuthorEmail = strings.TrimSpace(parts[1])
+		info.AuthorDate = strings.TrimSpace(parts[2])
+		info.Subject = strings.TrimSpace(parts[3])
+		info.Body = parts[4]
 	}
-	if err := checkoutFirstAvailableBranch(tmpDir + "/working"); err != nil {
-		return err
-	}
-
-	return nil
+	return info, nil
 }
 
 func createLocalBranchesFromOrigin(workDir string) error {

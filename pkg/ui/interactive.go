@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github-to-codeberg/pkg/config"
+	"github-to-codeberg/pkg/git"
 )
 
 func InteractiveEdit(cfg *config.Config) {
@@ -45,15 +46,15 @@ func InteractiveEdit(cfg *config.Config) {
 		remainingCommits := commits[current-1:]
 		for {
 			override, hasOverride := cfg.State.CommitOverrides[commitHash]
-			authorName, authorEmail, authorDate, subject, _ := getCommitDetails(cfg.TempDir, commitHash)
+			info, _ := git.CommitDetails(cfg.WorkDir(), commitHash)
 
 			fmt.Printf("%s────────────────────────────────────────────────────────────────%s\n", Bold, NC)
 			fmt.Printf("%sCommit %d of %d%s\n", Bold, current, len(commits), NC)
 			fmt.Printf("%s────────────────────────────────────────────────────────────────%s\n", Bold, NC)
 			fmt.Printf("  %sHash:%s       %s\n", Cyan, NC, commitHash[:12])
-			fmt.Printf("  %sAuthor:%s     %s <%s>\n", Cyan, NC, authorName, authorEmail)
-			fmt.Printf("  %sDate:%s       %s\n", Cyan, NC, authorDate)
-			fmt.Printf("  %sMessage:%s    %s\n", Cyan, NC, subject)
+			fmt.Printf("  %sAuthor:%s     %s <%s>\n", Cyan, NC, info.AuthorName, info.AuthorEmail)
+			fmt.Printf("  %sDate:%s       %s\n", Cyan, NC, info.AuthorDate)
+			fmt.Printf("  %sMessage:%s    %s\n", Cyan, NC, info.Subject)
 			fmt.Println()
 
 			if hasOverride && !override.Skip {
@@ -66,10 +67,10 @@ func InteractiveEdit(cfg *config.Config) {
 				fmt.Printf("  %sDefault changes:%s\n", Bold, NC)
 				targetName := cfg.NewName
 				if targetName == "" {
-					targetName = authorName
+					targetName = info.AuthorName
 				}
-				fmt.Printf("    Name:    %s → %s\n", authorName, targetName)
-				fmt.Printf("    Email:   %s → %s\n", authorEmail, cfg.NewEmail)
+				fmt.Printf("    Name:    %s → %s\n", info.AuthorName, targetName)
+				fmt.Printf("    Email:   %s → %s\n", info.AuthorEmail, cfg.NewEmail)
 			}
 
 			msgStatus := "(unchanged)"
@@ -79,7 +80,7 @@ func InteractiveEdit(cfg *config.Config) {
 			fmt.Printf("    Message: %s\n", msgStatus)
 			fmt.Println()
 
-			choice := promptCommitChoice(commitHash, remainingCommits, hasOverride, cfg, prompts)
+			choice := promptCommitChoice(commitHash, remainingCommits, hasOverride, info, cfg, prompts)
 			if choice == "quit" {
 				return
 			}
@@ -118,25 +119,7 @@ func getCommitsByLogFilter(tmpDir string, filter string) []string {
 	return commits
 }
 
-func getCommitDetails(tmpDir string, hash string) (authorName, authorEmail, authorDate, subject, body string) {
-	cmd := exec.Command("git", "log", "-1", "--format=%an%x00%ae%x00%ai%x00%s%x00%B", hash)
-	cmd.Dir = tmpDir + "/working"
-	output, err := cmd.Output()
-	if err != nil {
-		return
-	}
-	parts := strings.SplitN(string(output), "\x00", 5)
-	if len(parts) >= 5 {
-		authorName = strings.TrimSpace(parts[0])
-		authorEmail = strings.TrimSpace(parts[1])
-		authorDate = strings.TrimSpace(parts[2])
-		subject = strings.TrimSpace(parts[3])
-		body = parts[4]
-	}
-	return
-}
-
-func promptCommitChoice(commitHash string, remainingCommits []string, hasOverride bool, cfg *config.Config, prompts *PromptSession) string {
+func promptCommitChoice(commitHash string, remainingCommits []string, hasOverride bool, info git.CommitInfo, cfg *config.Config, prompts *PromptSession) string {
 
 	for {
 		if hasOverride {
@@ -189,7 +172,7 @@ func promptCommitChoice(commitHash string, remainingCommits []string, hasOverrid
 		case "M":
 			fmt.Println()
 			fmt.Printf("  %sCurrent message:%s\n", Cyan, NC)
-			fmt.Printf("    %s\n", getCommitSubject(cfg.TempDir, commitHash))
+			fmt.Printf("    %s\n", info.Subject)
 			fmt.Println()
 			fmt.Printf("  %sEnter new commit message (or press Enter to keep current):%s\n", Cyan, NC)
 			customMessage, err := prompts.ReadLine("")
@@ -209,7 +192,7 @@ func promptCommitChoice(commitHash string, remainingCommits []string, hasOverrid
 			if !hasOverride {
 				targetName := cfg.NewName
 				if targetName == "" {
-					targetName = getCommitAuthorName(cfg.TempDir, commitHash)
+					targetName = info.AuthorName
 				}
 				cfg.State.CommitOverrides[commitHash] = config.CommitOverride{
 					Name:  targetName,
@@ -227,7 +210,8 @@ func promptCommitChoice(commitHash string, remainingCommits []string, hasOverrid
 			for _, remainingHash := range remainingCommits {
 				targetName := cfg.NewName
 				if targetName == "" {
-					targetName = getCommitAuthorName(cfg.TempDir, remainingHash)
+					remInfo, _ := git.CommitDetails(cfg.WorkDir(), remainingHash)
+					targetName = remInfo.AuthorName
 				}
 				cfg.State.CommitOverrides[remainingHash] = config.CommitOverride{
 					Name:  targetName,
@@ -242,20 +226,6 @@ func promptCommitChoice(commitHash string, remainingCommits []string, hasOverrid
 			cfg.Logger.Warning("Invalid choice. Please select E, M, A, S, D, or Q.")
 		}
 	}
-}
-
-func getCommitSubject(tmpDir string, hash string) string {
-	cmd := exec.Command("git", "log", "-1", "--format=%s", hash)
-	cmd.Dir = tmpDir + "/working"
-	output, _ := cmd.Output()
-	return strings.TrimSpace(string(output))
-}
-
-func getCommitAuthorName(tmpDir string, hash string) string {
-	cmd := exec.Command("git", "log", "-1", "--format=%an", hash)
-	cmd.Dir = tmpDir + "/working"
-	output, _ := cmd.Output()
-	return strings.TrimSpace(string(output))
 }
 
 func uniqueList(list []string) []string {

@@ -67,7 +67,7 @@ func cleanupTempDir(cfg *config.Config) {
 	if cfg.TempDir == "" {
 		return
 	}
-	if err := os.RemoveAll(cfg.TempDir); err != nil && cfg.Logger != nil {
+	if err := os.RemoveAll(cfg.TempDir); err != nil {
 		cfg.Logger.Warning("Failed to clean up temp directory: " + cfg.TempDir)
 	}
 }
