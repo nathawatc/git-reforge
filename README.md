@@ -1,30 +1,35 @@
 # GitHub to Codeberg
 
-Migrate repositories from GitHub to Codeberg with history rewriting.
+Migrate Git repositories from GitHub to Codeberg with automated history rewriting.
 
 ## Features
 
-- **Repository Migration** - Clone and push repositories from GitHub to Codeberg
-- **Author Rewriting** - Change author name and email across all commits
-- **Multiple Author Support** - Rewrite commits from multiple old authors
-- **Interactive Mode** - Review and customize changes per-commit:
+- **Fast Dual-Engine Rewriting** - Uses `git-filter-repo` when installed for near-instant rewrites,
+  with automatic fallback to Git's built-in `git filter-branch`.
+- **Author Rewriting** - Change author and committer names and emails across all commits.
+- **Multiple Author Support** - Replace commits originating from multiple historical authors.
+- **Interactive Mode** - Review and customize changes per commit:
   - Edit author name and email individually
-  - Edit commit messages
+  - Customize commit messages
   - Skip specific commits
-  - Apply defaults to remaining commits
-- **Co-author Rewriting** - Rewrite, remove, or review trailers interactively
-- **Commit Signing** - GPG and SSH signing options:
+  - Apply defaults to all remaining commits
+- **Co-author Management** - Rewrite, remove, or review `Co-authored-by` trailers interactively.
+- **Commit & Tag Signing** - Comprehensive GPG and SSH signing options:
   - Keep original signatures
   - Re-sign with GPG key
   - Re-sign with SSH key
   - Strip all signatures
-- **Local Save** - Save the rewritten repository locally without pushing
-- **Preserve History** - Original commit dates are preserved
+  - Preserves original tagger names, emails, and historical release timestamps.
+- **Atomic Multi-Branch Push** - Pushes all branches and tags in a single atomic network operation.
+- **Local Inspection** - Save the rewritten repository locally without pushing (`--no-push`).
+- **CI / Automation Ready** - Headless execution support using the `-y, --yes` flag.
+- **Preserve History** - Original commit dates, parent links, and directory trees are preserved.
 
 ## Requirements
 
-- Git
-- Go 1.24+
+- Git 2.20+
+- Go 1.24+ (required only if building from source)
+- `git-filter-repo` (optional but strongly recommended for high-speed rewrites)
 - GPG (optional, for GPG signing)
 - SSH (optional, for SSH signing)
 - A GitHub account with repositories to migrate
@@ -54,19 +59,19 @@ go build .
 
 ### Optional Options
 
-| Option                  | Description                                                   |
-| ----------------------- | ------------------------------------------------------------- |
-| `-n, --new-name <name>` | New author name                                               |
-| `-o, --old-name <name>` | Old author name(s) to replace (repeatable or comma-separated) |
-| `-i, --interactive`     | Enable interactive mode for per-commit editing                |
-| `--sign-mode <mode>`    | Signing mode: `keep\|gpg\|ssh\|none` (default: `keep`)        |
-| `--gpg-key <keyid>`     | GPG key ID for re-signing (required if `--sign-mode=gpg`)     |
-| `--ssh-key <path>`      | SSH key path for re-signing (required if `--sign-mode=ssh`)   |
-| `--nosign`              | Shorthand for `--sign-mode=none`                              |
-| `--save-dir <path>`     | Save rewritten repo to `<path>` (directory must not exist)    |
-| `--no-push`             | Rewrite history locally but skip pushing to Codeberg          |
-| `-y, --yes`             | Skip confirmation prompt for non-interactive / CI runs        |
-| `-h, --help`            | Show help message                                             |
+| Option                  | Description                                                    |
+| ----------------------- | -------------------------------------------------------------- |
+| `-n, --new-name <name>` | New author name (optional; preserves original name if omitted) |
+| `-o, --old-name <name>` | Old author name(s) to replace (repeatable or comma-separated)  |
+| `-i, --interactive`     | Enable interactive mode for per-commit editing                 |
+| `--sign-mode <mode>`    | Signing mode: `keep\|gpg\|ssh\|none` (default: `keep`)         |
+| `--gpg-key <keyid>`     | GPG key ID for re-signing (required if `--sign-mode=gpg`)      |
+| `--ssh-key <path>`      | SSH key path for re-signing (required if `--sign-mode=ssh`)    |
+| `--nosign`              | Shorthand for `--sign-mode=none`                               |
+| `--save-dir <path>`     | Save rewritten repo to `<path>` (directory must not exist)     |
+| `--no-push`             | Rewrite history locally but skip pushing to Codeberg           |
+| `-y, --yes`             | Skip confirmation prompt for non-interactive / CI runs         |
+| `-h, --help`            | Show help message                                              |
 
 ### Co-Authored-by Options
 
@@ -87,99 +92,119 @@ go build .
 
 ```bash
 ./github-to-codeberg -s https://github.com/user/repo.git \
--d https://codeberg.org/user/repo.git \
--o "OldName" \
--e myuser@noreply.codeberg.org
+  -d https://codeberg.org/user/repo.git \
+  -o "OldName" \
+  -e myuser@noreply.codeberg.org
+```
+
+**Non-interactive / CI run:**
+
+```bash
+./github-to-codeberg -s https://github.com/user/repo.git \
+  -d https://codeberg.org/user/repo.git \
+  -o "OldName" -n "NewName" \
+  -e myuser@noreply.codeberg.org \
+  -y
 ```
 
 **Interactive mode with custom author:**
 
 ```bash
 ./github-to-codeberg -s https://github.com/user/repo.git \
--d https://codeberg.org/user/repo.git \
--o "OldName" -n "NewName" \
--e newuser@noreply.codeberg.org \
--i
+  -d https://codeberg.org/user/repo.git \
+  -o "OldName" -n "NewName" \
+  -e newuser@noreply.codeberg.org \
+  -i
 ```
 
 **With GPG re-signing:**
 
 ```bash
 ./github-to-codeberg -s https://github.com/user/repo.git \
--d https://codeberg.org/user/repo.git \
--o "OldName" \
--e myuser@noreply.codeberg.org \
---sign-mode gpg --gpg-key ABCD1234
+  -d https://codeberg.org/user/repo.git \
+  -o "OldName" \
+  -e myuser@noreply.codeberg.org \
+  --sign-mode gpg --gpg-key ABCD1234
+```
+
+**With SSH re-signing:**
+
+```bash
+./github-to-codeberg -s https://github.com/user/repo.git \
+  -d https://codeberg.org/user/repo.git \
+  -o "OldName" \
+  -e myuser@noreply.codeberg.org \
+  --sign-mode ssh --ssh-key ~/.ssh/id_ed25519
 ```
 
 **Multiple old author names:**
 
 ```bash
 ./github-to-codeberg -s https://github.com/user/repo.git \
--d https://codeberg.org/user/repo.git \
--o "OldName1" -o "OldName2" \
--n "NewName" \
--e newuser@noreply.codeberg.org
+  -d https://codeberg.org/user/repo.git \
+  -o "OldName1" -o "OldName2" \
+  -n "NewName" \
+  -e newuser@noreply.codeberg.org
 ```
 
 **Rewrite locally and save without pushing:**
 
 ```bash
 ./github-to-codeberg -s https://github.com/user/repo.git \
--o "OldName" -n "NewName" \
--e newuser@noreply.codeberg.org \
---no-push --save-dir /path/to/output
+  -o "OldName" -n "NewName" \
+  -e newuser@noreply.codeberg.org \
+  --no-push --save-dir /path/to/output
 ```
 
 **Save a local copy and push:**
 
 ```bash
 ./github-to-codeberg -s https://github.com/user/repo.git \
--d https://codeberg.org/user/repo.git \
--o "OldName" -n "NewName" \
--e newuser@noreply.codeberg.org \
---save-dir /path/to/output
+  -d https://codeberg.org/user/repo.git \
+  -o "OldName" -n "NewName" \
+  -e newuser@noreply.codeberg.org \
+  --save-dir /path/to/output
 ```
 
 **Remove all matching Co-authored-by trailers:**
 
 ```bash
 ./github-to-codeberg -s https://github.com/user/repo.git \
--d https://codeberg.org/user/repo.git \
--o "OldName" \
--e myuser@noreply.codeberg.org \
---coauthor-mode remove --coauthor-old "OldName"
+  -d https://codeberg.org/user/repo.git \
+  -o "OldName" \
+  -e myuser@noreply.codeberg.org \
+  --coauthor-mode remove --coauthor-old "OldName"
 ```
 
 **Rewrite Co-authored-by trailers:**
 
 ```bash
 ./github-to-codeberg -s https://github.com/user/repo.git \
--d https://codeberg.org/user/repo.git \
--o "OldName" \
--e myuser@noreply.codeberg.org \
---coauthor-mode rewrite \
---coauthor-old "OldName" \
---coauthor-old-email "oldname@users.noreply.github.com" \
---coauthor-new-name "NewName" \
---coauthor-new-email "newname@noreply.codeberg.org"
+  -d https://codeberg.org/user/repo.git \
+  -o "OldName" \
+  -e myuser@noreply.codeberg.org \
+  --coauthor-mode rewrite \
+  --coauthor-old "OldName" \
+  --coauthor-old-email "oldname@users.noreply.github.com" \
+  --coauthor-new-name "NewName" \
+  --coauthor-new-email "newname@noreply.codeberg.org"
 ```
 
 **Interactive Co-authored-by review:**
 
 ```bash
 ./github-to-codeberg -s https://github.com/user/repo.git \
--d https://codeberg.org/user/repo.git \
--o "OldName" \
--e myuser@noreply.codeberg.org \
---coauthor-mode interactive --coauthor-old "OldName"
+  -d https://codeberg.org/user/repo.git \
+  -o "OldName" \
+  -e myuser@noreply.codeberg.org \
+  --coauthor-mode interactive --coauthor-old "OldName"
 ```
 
 </details>
 
 ### Interactive Mode
 
-When using `-i` flag, you can review each commit and choose:
+When using the `-i` flag, you can review each commit individually:
 
 | Key | Action                             |
 | --- | ---------------------------------- |
@@ -205,9 +230,9 @@ With `--coauthor-mode interactive`, you can review each affected commit:
 
 > [!NOTE]
 >
-> - The tool uses a temporary clone — original repo is never modified
-> - Rewriting history invalidates any existing commit signatures
-> - `--no-push` lets you inspect the rewritten repo before pushing
-> - Combine `--save-dir` and `--dest` to save a local copy and push
-> - `Co-authored-by` is case-sensitive; use email to narrow matches
-> - `--save-dir` without `--dest` automatically implies `--no-push`
+> - The tool uses a temporary clone — your original repository is never modified.
+> - Rewriting commit history changes commit SHAs, which invalidates original cryptographic signatures.
+> - `--no-push` allows you to inspect the rewritten repository locally before pushing.
+> - Combine `--save-dir` and `--dest` to save a local backup copy and push to Codeberg in one run.
+> - `Co-authored-by` matching is case-sensitive; supply `--coauthor-old-email` to narrow matches.
+> - `--save-dir` without `--dest` automatically implies `--no-push`.

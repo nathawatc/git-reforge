@@ -1,14 +1,16 @@
 # AGENTS.md
 
-Guidance for AI coding agents working in this repo.
+Guidance for AI coding agents working in this repository.
 
 ## Project Overview
 
-Go migration tool. Rewrites GitHub commit history → pushes to Codeberg. Replaces `src/main.sh`.
-Supports author rewriting, Co-authored-by trailer manipulation, GPG/SSH re-signing,
-batch/interactive workflows.
+Go CLI migration tool that clones Git repositories from GitHub, rewrites commit history (authors,
+committers, messages, `Co-authored-by` trailers, signatures), and pushes the rewritten branches
+and tags to Codeberg.
 
-## Build Commands
+Replaces the legacy shell implementation (`src/main.sh`).
+
+## Build & Test Commands
 
 ```bash
 # Build binary
@@ -17,114 +19,141 @@ go build .
 # Format code and optimize imports
 goimports -w -local github-to-codeberg .
 
-# Tidy module dependencies
+# Tidy module dependencies (keeps only github.com/urfave/cli/v3)
 go mod tidy
 
-# Run tests
-go test ./...
+# Run all tests
+go test -count=1 ./...
 
-# Run a specific test
-go test ./pkg/shell/... -v
+# Run a specific package test with verbose output
+go test ./pkg/git/... -v
 
-# Lint
+# Run linter
 golangci-lint run
 
-# Cross-Platform Build
+# Check Markdown formatting and line length
+rumdl check .
+
+# Snapshot release build
 goreleaser build --snapshot --clean
 ```
 
-## Architecture
+## Architecture & Package Responsibilities
 
 ```text
-main.go                 # CLI entry point — urfave/cli/v3 flags, validation/dependency preflight, user prompt, hands off to migration.Run
+main.go                 # CLI entry point (urfave/cli/v3 flags, preflight checks, hands off to migration.Run)
 pkg/
-	config/config.go      # Config struct, InteractiveState, WorkDir() method
-	config/validation.go  # ParseOldNames, Validate, CheckDependencies
-	migration/run.go      # Run lifecycle + cleanupTempDir; owns clone → rewrite → coauthor → signing → save/push → summary
-	migration/run_test.go # cleanupTempDir unit test
-	migration/run_integration_test.go # end-to-end pipeline against local repos
-	git/clone.go          # Clone directly to working, push/save, failed-push recovery, temp cleanup
-	logging/logger.go     # slog wrapper with ANSI colors (imports pkg/ui)
-	rewrite/batch.go      # RewriteCommitsBatch, RewriteCommitsInteractive, filter generation
-	coauthor/batch.go     # RunCoauthorPhase, batch/interactive coauthor filtering
-	signing/commit.go     # HandleSigning (keep/none/gpg/ssh), ResignTags
-	shell/escape.go       # EscapeSed, EscapeSedReplacement, EscapeDoubleQuoted, QuoteSingle — shared shell/sed escaping utilities
+	config/
+		config.go       # Config struct, Logger interface, nopLogger default, InteractiveState
+		validation.go   # ParseOldNames, Validate, CheckDependencies (git, gpg, ssh-keygen)
+	git/
+		clone.go        # Clone directly to working, Push, Save, PruneOriginalRefs, CommitDetails
+	coauthor/
+		batch.go        # RunCoauthorPhase, RewriteBatch, RewriteInteractive, InteractiveCoauthorEdit
+	migration/
+		run.go          # Run lifecycle + cleanupTempDir (orchestrates clone → rewrite → coauthor → signing → save/push)
+	rewrite/
+		batch.go        # RewriteCommitsBatch, RewriteCommitsInteractive (filter-repo & filter-branch engines)
+	shell/
+		escape.go       # RunCommand (captures stderr), HasFilterRepo, QuoteSingle, EscapeSed, EscapeDoubleQuoted
+	signing/
+		commit.go       # HandleSigning (keep/none/gpg/ssh), ResignTags, tagger metadata preservation
+	logging/
+		logger.go       # ANSI terminal logger implementing config.Logger (Blue/Green/Yellow/Red/Cyan)
 	ui/
-		colors.go           # ANSI color constants (Red, Green, Yellow, Bold, NC, etc.)
-		display.go          # DisplayConfig (preflight prompt + summary)
-		input.go            # PromptSession — TTY / stdin reader wrapper
-		interactive.go      # InteractiveEdit — per-commit TTY menu loop
+		colors.go       # Single Source of Truth for ANSI color constants
+		display.go      # DisplayConfig (preflight summary + confirmation), ShowSummary
+		input.go        # PromptSession (TTY / stdin reader wrapper with Close)
+		interactive.go  # InteractiveEdit (per-commit interactive review loop)
 ```
 
-### Execution Flow
+## Execution Flow
 
-1. `main()` → parse args via urfave/cli/v3 → populate cfg → `config.Validate` → `config.CheckDependencies` → `ui.DisplayConfig` <!-- rumdl-disable-line MD013 -->
-2. `migration.Run(cfg)` → `git.Clone(cfg)` → Batch: `rewrite.RewriteCommitsBatch` | Interactive: `ui.InteractiveEdit` → `rewrite.RewriteCommitsInteractive` <!-- rumdl-disable-line MD013 -->
-3. `coauthor.RunCoauthorPhase`
-4. `signing.HandleSigning` → `ResignTags`
-5. `git.Save` or `git.Push` → `ui.ShowSummary`
-6. `cleanupTempDir(cfg)` deferred inside `migration.Run`
+1. `main()` initializes `logging.Logger` and `config.New()`, parses CLI flags via `urfave/cli/v3`.
+2. `config.Validate(cfg)` verifies URLs, author requirements, signing mode, and directory existence.
+3. `config.CheckDependencies(cfg)` confirms presence of `git` and signing binaries (`gpg` / `ssh-keygen`).
+4. `ui.DisplayConfig(cfg)` displays configuration; if `cfg.Yes` is set, skips confirmation prompt.
+5. `migration.Run(cfg)` executes the migration pipeline:
+   - `git.Clone(cfg)`: clones repository directly into `$TEMP_DIR/working` and checks out local branches.
+   - Author rewrite: `ui.InteractiveEdit(cfg)` + `rewrite.RewriteCommitsInteractive(cfg)` in interactive
+     mode; `rewrite.RewriteCommitsBatch(cfg)` in batch mode.
+   - Co-author trailers: `coauthor.RunCoauthorPhase(cfg)` (batch or interactive via
+     `InteractiveCoauthorEdit`).
+   - Signing: `signing.HandleSigning(cfg)` applies commit signing rules, then calls
+     `signing.ResignTags(cfg)`.
+   - Backup pruning: `git.PruneOriginalRefs(workDir)` removes any `.git/refs/original/` references.
+   - Local save: `git.Save(tmpDir, saveDir)` copies rewritten repo to target directory if requested.
+   - Remote push: `git.Push(cfg)` pushes all local branches and tags to destination unless
+     `--no-push` is set.
+   - Summary: `ui.ShowSummary(cfg)` prints operation report.
+6. Deferred cleanup: `cleanupTempDir(cfg)` removes `$TEMP_DIR` on success (`retErr == nil`).
 
-### Key Decisions
+## Technical Invariants & Key Decisions
 
-| Decision          | Choice                                                                                                                          |
-| ----------------- | ------------------------------------------------------------------------------------------------------------------------------- |
-| Git rewriting     | Uses `git filter-branch` via `exec.Command` (not pure go-git plumbing for rewrite)                                              |
-| Config validation | `pkg/config/validation.go` owns `ParseOldNames`, `Validate`, and dependency checks                                              |
-| Migration runner  | `pkg/migration/run.go` owns clone → rewrite → coauthor → signing → save/push → summary/cleanup                                  |
-| Config state      | Context struct passed as first arg; interactive state in `cfg.State` field                                                      |
-| Error handling    | Functions return `error`, CLI layer logs and exits with code 1                                                                  |
-| Temp dir          | `os.MkdirTemp()` root; `cfg.WorkDir()` returns `$TEMP_DIR/working`; clone failures self-clean; runner cleans only after success |
-| Logger            | `log/slog` stdlib with ANSI colors via `pkg/ui` constants                                                                       |
-| CLI flags         | `urfave/cli/v3` with explicit flag types; `--old-name` uses `StringSliceFlag` and `config.ParseOldNames`                        |
-| Shell escaping    | `pkg/shell/escape.go`; coauthor sed scripts must shell-quote the full sed program with `QuoteSingle` after sed escaping         |
-| Colors            | Single source: `pkg/ui/colors.go` — all packages import `pkg/ui` for constants                                                  |
+### History Rewriting Engines (`pkg/rewrite`, `pkg/coauthor`, `pkg/signing`)
 
-### Interactive State
+- **Dual-engine strategy**: The codebase checks `shell.HasFilterRepo()` at runtime.
+  - If `git-filter-repo` is available, it is preferred for execution (~0.05s per pass). It passes Python
+    callbacks with sidecar JSON configuration files written to `$TEMP_DIR`.
+  - If `git-filter-repo` is absent, it falls back to POSIX-compliant `git filter-branch` scripts.
+- **POSIX shell scripts**: When using `filter-branch`, scripts must use `#!/usr/bin/env sh`, `.` sourcing
+  (not `source`), and `case ... in` patterns (not Bash arrays `arr=(...)`), ensuring compatibility on
+  Debian/Ubuntu (`dash`), Alpine (`ash`), and macOS/BSD.
+- **Message streaming**: Message filter scripts must stream input (`cat` or `sed`) rather than capturing
+  into shell variables (`var=$(cat)`), preventing command substitution from stripping trailing newlines.
 
-Runtime choices from interactive mode live in `InteractiveState`, accessed via `cfg.State`:
+### Git Commit Metadata SSOT (`pkg/git/clone.go`)
 
-- `cfg.State.CommitOverrides map[string]CommitOverride` — per-commit name/email/skip
-- `cfg.State.CommitMessages map[string]string` — per-commit message overrides
-- `cfg.State.CoauthorActions map[string]string` — coauthor rewrite/remove/skip decisions
+- `git.CommitDetails(workDir, hash) (CommitInfo, error)` is the **Single Source of Truth** for extracting
+  commit metadata (`AuthorName`, `AuthorEmail`, `AuthorDate`, `Subject`, `Body`).
+- Uses a single formatted `git log -1 --format=%an%x00%ae%x00%ai%x00%s%x00%B` invocation. Other packages
+  must call `git.CommitDetails` rather than spawning ad-hoc `git log` subcommands.
 
-### Signing Modes
+### Interactive State (`pkg/config/config.go`)
 
-| Mode   | Implementation                                                                                      |
-| ------ | --------------------------------------------------------------------------------------------------- |
-| `keep` | No-op                                                                                               |
-| `none` | `git filter-branch` env-filter touching `GIT_COMMITTER_DATE` to recreate objects without signatures |
-| `gpg`  | `git filter-branch --commit-filter` with `git commit-tree -S"$KEY"`                                 |
-| `ssh`  | `git config gpg.format ssh` + `git filter-branch --commit-filter` with `git commit-tree -S`         |
+Runtime user decisions live in `cfg.State`:
 
-### Tag Handling
+- `CommitOverrides map[string]CommitOverride`: keyed by 40-character commit SHA string.
+- `CommitMessages map[string]string`: keyed by 40-character commit SHA string.
+- `CoauthorActions map[string]string`: keyed by 40-character commit SHA string
+  (`rewrite`, `remove`, `skip`).
 
-Always uses explicit refspec: `git push --force origin "refs/tags/*:refs/tags/*"` — never `--tags`,
-which silently skips annotated tags whose SHA changed after re-signing.
+No external git library (such as `go-git`) is used; commit hashes are native Go strings.
 
-`git.Push` must first check for tag refs and skip the tag push when the repository has no tags.
-If tags exist and the explicit tag push is rejected, return an error after offering the push-failure
-save/cleanup recovery path.
+### Git Remote & Push Semantics (`pkg/git/clone.go`)
 
-`signing.ResignTags` processes every annotated tag before returning. Accumulate tag failures with
-`errors.Join`, keep individual failure messages starting with `failed to ...`, and let
-`HandleSigning` propagate the joined error.
+- **Origin management**: `git-filter-repo` strips the `origin` remote by default. `git.Push` first tries
+  `git remote set-url origin <url>`, and if `origin` does not exist, runs `git remote add origin <url>`.
+- **Atomic branch push**: `pushBranches` constructs a single `git push --force origin <refspecs...>`
+  command for all branches. It never loops running one push per branch.
+- **Local branch precedence**: `branchRefspecs` maps local branch heads (`refs/heads/*`).
+- **Tag push**: Uses explicit refspec `git push --force origin "refs/tags/*:refs/tags/*"`.
+  - Skipped if the repository contains no tags.
+  - Never uses `--tags`, which silently skips annotated tags whose SHA changed after re-signing.
+- **Push recovery**: If pushing fails and no terminal is attached, returns an error; if a TTY is available,
+  offers an interactive prompt to save the rewritten repository locally before exiting.
 
-## Common Commands
+### Annotated Tag Recreation (`pkg/signing/commit.go`)
 
-```bash
-# Basic migration
-./github-to-codeberg -s https://github.com/user/repo.git -d ssh://git@codeberg.org/user/repo.git -o "OldName" -e user@noreply.codeberg.org
+- Re-signing tags (`stripTag`, `resignTagGPG`, `resignTagSSH`) must preserve the original release date
+  and author.
+- Reads tag metadata via `git for-each-ref --format="%(taggername)%00%(taggeremail:trim)%00%(taggerdate:raw)"`.
+- Passes `GIT_COMMITTER_NAME`, `GIT_COMMITTER_EMAIL`, and `GIT_COMMITTER_DATE` when executing `git tag`.
+- If the original tagger matches an old author name being migrated, applies `cfg.NewName` / `cfg.NewEmail`.
 
-# Interactive mode
-./github-to-codeberg -s <url> -d <url> -o "OldName" -e <email> -i
+### Directory & File Safety (`pkg/git/clone.go`)
 
-# Local-only rewrite
-./github-to-codeberg -s <url> -o "OldName" -e <email> --no-push --save-dir /path/to/output
+- `copyDirRecursive` creates destination directories with `0755` permissions so child files can always
+  be created, then applies original directory permissions in reverse order (deepest child folders first,
+  parent folders last). This prevents read-only directories (`0555`) from causing `permission denied`.
+- `copyFile` guards deferred close checks so close errors do not mask underlying I/O errors.
+- `PruneOriginalRefs` removes `.git/refs/original/` before local export or push to prevent
+  backup history leaks.
 
-# With SSH signing
-./github-to-codeberg -s <url> -d <url> -o "OldName" -e <email> --sign-mode ssh --ssh-key /path/to/key
+### Subprocess Execution & Error Handling (`pkg/shell/escape.go`)
 
-# With GPG signing
-./github-to-codeberg -s <url> -d <url> -o "OldName" -e <email> --sign-mode gpg --gpg-key ABCD1234
-```
+- All external commands must use `shell.RunCommand(cmd, description)`.
+- `shell.RunCommand` captures `cmd.CombinedOutput()` and formats errors with command stderr output.
+- Paths and shell script arguments must be escaped using `shell.QuoteSingle(path)`.
+<!-- rumdl-disable-next-line MD013 -->
+- Coauthor regex patterns use `shell.EscapeSed` for matching and `shell.EscapeSedReplacement` for replacement.
