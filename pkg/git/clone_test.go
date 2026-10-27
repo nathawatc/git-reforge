@@ -264,6 +264,42 @@ func TestSavePreservesSymlinks(t *testing.T) {
 	}
 }
 
+func TestPruneOriginalRefsRemovesBackupRefs(t *testing.T) {
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skip("git not available")
+	}
+
+	workDir := filepath.Join(t.TempDir(), "repo")
+	if err := os.Mkdir(workDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	runGit(t, workDir, "init")
+	runGit(t, workDir, "config", "user.name", "Test User")
+	runGit(t, workDir, "config", "user.email", "test@example.org")
+	writeFile(t, filepath.Join(workDir, "file.txt"), "hello\n")
+	runGit(t, workDir, "add", "file.txt")
+	runGit(t, workDir, "commit", "-m", "init")
+	head := strings.TrimSpace(runGitOutput(t, workDir, "rev-parse", "HEAD"))
+	runGit(t, workDir, "update-ref", "refs/original/refs/heads/main", head)
+
+	refsBefore, err := listRefs(workDir, "refs/original")
+	if err != nil || len(refsBefore) == 0 {
+		t.Fatalf("expected refs/original to exist, got %v (err: %v)", refsBefore, err)
+	}
+
+	if err := PruneOriginalRefs(workDir); err != nil {
+		t.Fatalf("PruneOriginalRefs() error = %v", err)
+	}
+
+	refsAfter, err := listRefs(workDir, "refs/original")
+	if err != nil {
+		t.Fatalf("listRefs() after prune error = %v", err)
+	}
+	if len(refsAfter) != 0 {
+		t.Fatalf("refs/original still exists after prune: %v", refsAfter)
+	}
+}
+
 func writeFile(t *testing.T, path string, contents string) {
 	t.Helper()
 	if err := os.WriteFile(path, []byte(contents), 0644); err != nil {

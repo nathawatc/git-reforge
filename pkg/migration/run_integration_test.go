@@ -95,6 +95,10 @@ func TestNonInteractiveMigrationPipelineLocalRepos(t *testing.T) {
 	if _, err := os.Stat(filepath.Join(saveDir, ".git")); err != nil {
 		t.Fatalf("saved repository missing .git: %v", err)
 	}
+	savedLog := runGitOutput(t, saveDir, "log", "--all", "--format=%an <%ae>")
+	if strings.Contains(savedLog, "Old User") {
+		t.Fatalf("saved repository still contains old author in git log --all:\n%s", savedLog)
+	}
 	tags := runGitOutput(t, destDir, "for-each-ref", "--format=%(refname)", "refs/tags")
 	if !strings.Contains(tags, "refs/tags/v1.0.0\n") {
 		t.Fatalf("destination tags = %q missing v1.0.0", tags)

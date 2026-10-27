@@ -41,6 +41,10 @@ func Run(cfg *config.Config) (retErr error) {
 		return err
 	}
 
+	if err := git.PruneOriginalRefs(cfg.WorkDir()); err != nil {
+		return err
+	}
+
 	if cfg.SaveDir != "" {
 		if err := git.Save(cfg.TempDir, cfg.SaveDir); err != nil {
 			return err

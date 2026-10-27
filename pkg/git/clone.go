@@ -381,7 +381,29 @@ func promptSavePath(cfg *config.Config, tty *os.File, reader *bufio.Reader) erro
 
 // Save copies the working repository to saveDir
 func Save(tmpDir string, saveDir string) error {
-	return copyDirRecursive(tmpDir+"/working", saveDir)
+	workDir := tmpDir + "/working"
+	if err := PruneOriginalRefs(workDir); err != nil {
+		return err
+	}
+	return copyDirRecursive(workDir, saveDir)
+}
+
+// PruneOriginalRefs removes refs/original references left behind by filter-branch
+func PruneOriginalRefs(workDir string) error {
+	if _, err := os.Stat(filepath.Join(workDir, ".git")); os.IsNotExist(err) {
+		return nil
+	}
+	refs, err := listRefs(workDir, "refs/original")
+	if err != nil {
+		return err
+	}
+	for _, ref := range refs {
+		cmd := exec.Command("git", "update-ref", "-d", ref)
+		cmd.Dir = workDir
+		_ = cmd.Run()
+	}
+	_ = os.RemoveAll(filepath.Join(workDir, ".git", "refs", "original"))
+	return nil
 }
 
 func copyDirRecursive(src, dst string) error {
