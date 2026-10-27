@@ -7,6 +7,7 @@ type Config struct {
 	NewName     string
 	NewEmail    string
 	Interactive bool
+	Yes         bool
 	SignMode    string
 	GPGKey      string
 	SSHKey      string

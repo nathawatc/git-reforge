@@ -65,6 +65,7 @@ go build .
 | `--nosign`              | Shorthand for `--sign-mode=none`                              |
 | `--save-dir <path>`     | Save rewritten repo to `<path>` (directory must not exist)    |
 | `--no-push`             | Rewrite history locally but skip pushing to Codeberg          |
+| `-y, --yes`             | Skip confirmation prompt for non-interactive / CI runs        |
 | `-h, --help`            | Show help message                                             |
 
 ### Co-Authored-by Options

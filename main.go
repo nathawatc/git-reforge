@@ -93,8 +93,13 @@ func main() {
 				Usage: "Save the rewritten repository to <path>",
 			},
 			&cli.BoolFlag{
-				Name:  "no-push",
-				Usage: "Rewrite history locally but do not push",
+				Name:    "no-push",
+				Usage:   "Rewrite history locally but do not push",
+			},
+			&cli.BoolFlag{
+				Name:    "yes",
+				Aliases: []string{"y"},
+				Usage:   "Skip confirmation prompt",
 			},
 		},
 		Action: func(ctx context.Context, c *cli.Command) error {
@@ -108,6 +113,7 @@ func main() {
 			cfg.SSHKey = c.String("ssh-key")
 			cfg.SaveDir = c.String("save-dir")
 			cfg.NoPush = c.Bool("no-push")
+			cfg.Yes = c.Bool("yes")
 			cfg.CoauthorMode = c.String("coauthor-mode")
 			cfg.CoauthorOldName = c.String("coauthor-old")
 			cfg.CoauthorOldEmail = c.String("coauthor-old-email")

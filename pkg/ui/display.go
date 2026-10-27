@@ -73,6 +73,10 @@ func DisplayConfig(cfg *config.Config) {
 		fmt.Println()
 	}
 
+	if cfg.Yes {
+		return
+	}
+
 	prompts := NewPromptSession()
 	defer func() {
 		if err := prompts.Close(); err != nil {
