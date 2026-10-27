@@ -29,7 +29,7 @@ func RewriteBatch(cfg *config.Config) error {
 
 	log.Info("Applying Co-authored-by " + cfg.CoauthorMode + " to all commits...")
 	cmd := exec.Command("git", "filter-branch", "-f",
-		"--msg-filter", "bash "+coauthorMsgFilter,
+		"--msg-filter", "bash "+shell.QuoteSingle(coauthorMsgFilter),
 		"--tag-name-filter", "cat", "--", "--all")
 	cmd.Dir = cfg.WorkDir()
 	if err := cmd.Run(); err != nil {
@@ -58,7 +58,7 @@ func RewriteInteractive(cfg *config.Config) error {
 
 	log.Info(fmt.Sprintf("Applying %d Co-authored-by decision(s)...", len(cfg.State.CoauthorActions)))
 	cmd := exec.Command("git", "filter-branch", "-f",
-		"--msg-filter", "bash "+coauthorMsgFilter,
+		"--msg-filter", "bash "+shell.QuoteSingle(coauthorMsgFilter),
 		"--tag-name-filter", "cat", "--", "--all")
 	cmd.Dir = cfg.WorkDir()
 	if err := cmd.Run(); err != nil {

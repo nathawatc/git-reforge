@@ -76,7 +76,7 @@ done
 		return fmt.Errorf("failed to write filter script: %w", err)
 	}
 
-	cmd := exec.Command("git", "filter-branch", "-f", "--env-filter", "source "+filterScript, "--tag-name-filter", "cat", "--", "--all")
+	cmd := exec.Command("git", "filter-branch", "-f", "--env-filter", ". "+shell.QuoteSingle(filterScript), "--tag-name-filter", "cat", "--", "--all")
 	cmd.Dir = cfg.WorkDir()
 	cmd.Env = append(os.Environ(),
 		"FILTER_NEW_NAME="+cfg.NewName,
@@ -120,11 +120,11 @@ func RewriteCommitsInteractive(cfg *config.Config) error {
 		if err != nil {
 			return err
 		}
-		args = append(args, "--env-filter", "source "+envFilterScript)
+		args = append(args, "--env-filter", ". "+shell.QuoteSingle(envFilterScript))
 	}
 
 	if len(cfg.State.CommitMessages) > 0 {
-		args = append(args, "--msg-filter", "source "+msgFilterScript)
+		args = append(args, "--msg-filter", ". "+shell.QuoteSingle(msgFilterScript))
 	}
 
 	args = append(args, "--tag-name-filter", "cat", "--", "--all")
@@ -182,7 +182,7 @@ func generateMessageFilter(cfg *config.Config) (string, error) {
 			if err := os.WriteFile(msgFile, []byte(msg), 0644); err != nil {
 				return "", fmt.Errorf("failed to write message file: %w", err)
 			}
-			fmt.Fprintf(&script, "    %s)\n        cat \"%s\"\n        ;;\n", hash.String(), msgFile)
+			fmt.Fprintf(&script, "    %s)\n        cat %s\n        ;;\n", hash.String(), shell.QuoteSingle(msgFile))
 		}
 		script.WriteString("    *)\n        printf '%s' \"$original_msg\"\n        ;;\nesac\n")
 	} else {
