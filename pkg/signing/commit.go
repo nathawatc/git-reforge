@@ -3,7 +3,9 @@ package signing
 import (
 	"errors"
 	"fmt"
+	"os"
 	"os/exec"
+	"slices"
 	"strings"
 
 	"github-to-codeberg/pkg/config"
@@ -277,6 +279,54 @@ func getTagCommit(tmpDir string, tagName string) (string, error) {
 	return strings.TrimSpace(string(output)), nil
 }
 
+type taggerInfo struct {
+	name  string
+	email string
+	date  string
+}
+
+func getTagTagger(tmpDir string, tagName string) (taggerInfo, error) {
+	cmd := exec.Command("git", "for-each-ref", "--format=%(taggername)%00%(taggeremail:trim)%00%(taggerdate:raw)", "refs/tags/"+tagName)
+	cmd.Dir = tmpDir + "/working"
+	output, err := cmd.Output()
+	if err != nil {
+		return taggerInfo{}, fmt.Errorf("git tagger info failed: %w", err)
+	}
+	parts := strings.Split(strings.TrimRight(string(output), "\n"), "\x00")
+	if len(parts) < 3 {
+		return taggerInfo{}, nil
+	}
+	return taggerInfo{
+		name:  parts[0],
+		email: strings.Trim(parts[1], "<>"),
+		date:  parts[2],
+	}, nil
+}
+
+func taggerEnv(cfg *config.Config, info taggerInfo) []string {
+	env := os.Environ()
+	name := info.name
+	email := info.email
+	if slices.Contains(cfg.OldNames, name) {
+		if cfg.NewName != "" {
+			name = cfg.NewName
+		}
+		if cfg.NewEmail != "" {
+			email = cfg.NewEmail
+		}
+	}
+	if name != "" {
+		env = append(env, "GIT_COMMITTER_NAME="+name)
+	}
+	if email != "" {
+		env = append(env, "GIT_COMMITTER_EMAIL="+email)
+	}
+	if info.date != "" {
+		env = append(env, "GIT_COMMITTER_DATE="+info.date)
+	}
+	return env
+}
+
 func stripTag(cfg *config.Config, tagName string) error {
 	msg, err := getTagRecreateMessage(cfg.TempDir, tagName)
 	if err != nil {
@@ -286,9 +336,14 @@ func stripTag(cfg *config.Config, tagName string) error {
 	if err != nil {
 		return err
 	}
+	tagger, err := getTagTagger(cfg.TempDir, tagName)
+	if err != nil {
+		return err
+	}
 
 	cmd := exec.Command("git", "tag", "-f", "-a", tagName, tagCommit, "-m", msg)
 	cmd.Dir = cfg.WorkDir()
+	cmd.Env = taggerEnv(cfg, tagger)
 	if err := cmd.Run(); err != nil {
 		return fmt.Errorf("git tag strip failed: %w", err)
 	}
@@ -304,11 +359,16 @@ func resignTagGPG(cfg *config.Config, tagName string) error {
 	if err != nil {
 		return err
 	}
+	tagger, err := getTagTagger(cfg.TempDir, tagName)
+	if err != nil {
+		return err
+	}
 
 	cmd := exec.Command("git",
 		"-c", "gpg.format=openpgp",
 		"tag", "-f", "-s", tagName, "-u", cfg.GPGKey, tagCommit, "-m", msg)
 	cmd.Dir = cfg.WorkDir()
+	cmd.Env = taggerEnv(cfg, tagger)
 	if err := cmd.Run(); err != nil {
 		return fmt.Errorf("git tag resign GPG failed: %w", err)
 	}
@@ -324,12 +384,17 @@ func resignTagSSH(cfg *config.Config, tagName string) error {
 	if err != nil {
 		return err
 	}
+	tagger, err := getTagTagger(cfg.TempDir, tagName)
+	if err != nil {
+		return err
+	}
 
 	cmd := exec.Command("git",
 		"-c", "gpg.format=ssh",
 		"-c", "user.signingkey="+cfg.SSHKey,
 		"tag", "-f", "-s", tagName, tagCommit, "-m", msg)
 	cmd.Dir = cfg.WorkDir()
+	cmd.Env = taggerEnv(cfg, tagger)
 	if err := cmd.Run(); err != nil {
 		return fmt.Errorf("git tag resign SSH failed: %w", err)
 	}

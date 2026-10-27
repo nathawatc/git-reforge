@@ -63,6 +63,45 @@ func TestStripTagPreservesSubjectAndBody(t *testing.T) {
 	}
 }
 
+func TestStripTagPreservesTaggerAndDate(t *testing.T) {
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skip("git not available")
+	}
+
+	tmpDir := t.TempDir()
+	workDir := filepath.Join(tmpDir, "working")
+	if err := os.Mkdir(workDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+
+	runGit(t, workDir, "init")
+	runGit(t, workDir, "config", "user.name", "Test User")
+	runGit(t, workDir, "config", "user.email", "test@example.org")
+	writeFile(t, filepath.Join(workDir, "file.txt"))
+	runGit(t, workDir, "add", "file.txt")
+	runGit(t, workDir, "commit", "-m", "initial")
+
+	runGitWithEnv(t, workDir, []string{
+		"GIT_COMMITTER_NAME=Original Tagger",
+		"GIT_COMMITTER_EMAIL=tagger@example.com",
+		"GIT_COMMITTER_DATE=2016-03-04T05:06:07+00:00",
+	}, "tag", "-a", "v1.0.0", "-m", "Release v1.0.0")
+
+	cfg := config.New()
+	cfg.TempDir = tmpDir
+	cfg.Logger = testLogger{}
+
+	if err := stripTag(cfg, "v1.0.0"); err != nil {
+		t.Fatalf("stripTag() error = %v", err)
+	}
+
+	taggerInfo := runGitOutput(t, workDir, "for-each-ref", "--format=%(taggername)|%(taggeremail)|%(taggerdate:iso-strict)", "refs/tags/v1.0.0")
+	want := "Original Tagger|<tagger@example.com>|2016-03-04T05:06:07Z\n"
+	if taggerInfo != want {
+		t.Fatalf("tagger info after strip = %q want %q", taggerInfo, want)
+	}
+}
+
 func TestGetTagRecreateMessagePreservesIndentedBody(t *testing.T) {
 	if _, err := exec.LookPath("git"); err != nil {
 		t.Skip("git not available")
