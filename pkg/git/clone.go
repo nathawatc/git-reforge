@@ -415,7 +415,12 @@ func PruneOriginalRefs(workDir string) error {
 }
 
 func copyDirRecursive(src, dst string) error {
-	return filepath.Walk(src, func(path string, info os.FileInfo, err error) error {
+	var dirModes []struct {
+		path string
+		mode os.FileMode
+	}
+
+	err := filepath.Walk(src, func(path string, info os.FileInfo, err error) error {
 		if err != nil {
 			return err
 		}
@@ -432,12 +437,14 @@ func copyDirRecursive(src, dst string) error {
 			return copySymlink(path, dstPath)
 		}
 		if info.IsDir() {
-			if err := os.MkdirAll(dstPath, info.Mode().Perm()); err != nil {
+			// Create directory with write permissions so child files can be written
+			if err := os.MkdirAll(dstPath, 0755); err != nil {
 				return err
 			}
-			if err := os.Chmod(dstPath, info.Mode().Perm()); err != nil {
-				return err
-			}
+			dirModes = append(dirModes, struct {
+				path string
+				mode os.FileMode
+			}{path: dstPath, mode: info.Mode().Perm()})
 		} else {
 			if err := os.MkdirAll(filepath.Dir(dstPath), 0755); err != nil {
 				return err
@@ -448,6 +455,18 @@ func copyDirRecursive(src, dst string) error {
 		}
 		return nil
 	})
+	if err != nil {
+		return err
+	}
+
+	// Apply final directory permissions in reverse order (children before parents)
+	for i := len(dirModes) - 1; i >= 0; i-- {
+		if err := os.Chmod(dirModes[i].path, dirModes[i].mode); err != nil {
+			return err
+		}
+	}
+
+	return nil
 }
 
 func copyFile(src, dst string, mode os.FileMode) (err error) {
@@ -456,7 +475,7 @@ func copyFile(src, dst string, mode os.FileMode) (err error) {
 		return err
 	}
 	defer func() {
-		if closeErr := sf.Close(); closeErr != nil {
+		if closeErr := sf.Close(); closeErr != nil && err == nil {
 			err = closeErr
 		}
 	}()
@@ -466,15 +485,15 @@ func copyFile(src, dst string, mode os.FileMode) (err error) {
 		return err
 	}
 	defer func() {
-		if closeErr := df.Close(); closeErr != nil {
+		if closeErr := df.Close(); closeErr != nil && err == nil {
 			err = closeErr
 		}
 	}()
 
-	if _, err := io.Copy(df, sf); err != nil {
+	if _, err = io.Copy(df, sf); err != nil {
 		return err
 	}
-	if err := df.Chmod(mode); err != nil {
+	if err = df.Chmod(mode); err != nil {
 		return err
 	}
 	return df.Sync()

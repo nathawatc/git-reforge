@@ -265,6 +265,48 @@ func TestSavePreservesSymlinks(t *testing.T) {
 	}
 }
 
+func TestSaveHandlesReadOnlyDirectories(t *testing.T) {
+	tmpDir := t.TempDir()
+	workDir := filepath.Join(tmpDir, "working")
+	saveDir := filepath.Join(tmpDir, "saved")
+	if err := os.Mkdir(workDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+
+	roDir := filepath.Join(workDir, "readonly")
+	if err := os.Mkdir(roDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	writeFile(t, filepath.Join(roDir, "nested.txt"), "nested content\n")
+	if err := os.Chmod(roDir, 0555); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		_ = os.Chmod(roDir, 0755)
+		_ = os.Chmod(filepath.Join(saveDir, "readonly"), 0755)
+	})
+
+	if err := Save(tmpDir, saveDir); err != nil {
+		t.Fatalf("Save() error = %v want nil", err)
+	}
+
+	content, err := os.ReadFile(filepath.Join(saveDir, "readonly", "nested.txt"))
+	if err != nil {
+		t.Fatalf("failed to read copied file in readonly dir: %v", err)
+	}
+	if string(content) != "nested content\n" {
+		t.Fatalf("file content = %q want 'nested content\\n'", string(content))
+	}
+
+	info, err := os.Stat(filepath.Join(saveDir, "readonly"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := info.Mode().Perm(); got != 0555 {
+		t.Fatalf("saved readonly directory mode = %o want 555", got)
+	}
+}
+
 func TestPruneOriginalRefsRemovesBackupRefs(t *testing.T) {
 	if _, err := exec.LookPath("git"); err != nil {
 		t.Skip("git not available")
