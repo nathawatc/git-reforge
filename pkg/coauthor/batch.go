@@ -1,6 +1,7 @@
 package coauthor
 
 import (
+	"encoding/json"
 	"fmt"
 	"os"
 	"os/exec"
@@ -19,6 +20,10 @@ func RewriteBatch(cfg *config.Config) error {
 
 	log := cfg.Logger
 	log.Header("Rewriting Co-authored-by Trailers")
+
+	if shell.HasFilterRepo() {
+		return rewriteBatchFilterRepo(cfg)
+	}
 
 	coauthorMsgFilter := filepath.Join(cfg.TempDir, "coauthor_msg_filter.sh")
 	if err := buildCoauthorMsgFilter(cfg, coauthorMsgFilter, "batch"); err != nil {
@@ -48,6 +53,10 @@ func RewriteInteractive(cfg *config.Config) error {
 
 	log := cfg.Logger
 	log.Header("Applying Co-authored-by Interactive Decisions")
+
+	if shell.HasFilterRepo() {
+		return rewriteInteractiveFilterRepo(cfg)
+	}
 
 	coauthorMsgFilter := filepath.Join(cfg.TempDir, "coauthor_msg_filter.sh")
 	if err := buildCoauthorMsgFilter(cfg, coauthorMsgFilter, "interactive"); err != nil {
@@ -122,6 +131,112 @@ func buildCoauthorMsgFilter(cfg *config.Config, outputPath string, modeType stri
 		return fmt.Errorf("failed to write coauthor filter script: %w", err)
 	}
 
+	return nil
+}
+
+func rewriteBatchFilterRepo(cfg *config.Config) error {
+	log := cfg.Logger
+	dataFile := filepath.Join(cfg.TempDir, "filter_coauthor_batch.json")
+	data := map[string]interface{}{
+		"old_name":  cfg.CoauthorOldName,
+		"old_email": cfg.CoauthorOldEmail,
+		"new_name":  cfg.CoauthorNewName,
+		"new_email": cfg.CoauthorNewEmail,
+		"mode":      cfg.CoauthorMode,
+	}
+	b, err := json.Marshal(data)
+	if err != nil {
+		return err
+	}
+	if err := os.WriteFile(dataFile, b, 0644); err != nil {
+		return err
+	}
+
+	pyCallback := fmt.Sprintf(`import re, json
+with open(%q, 'r', encoding='utf-8') as f:
+    cfg = json.load(f)
+
+old_name = cfg['old_name']
+old_email = cfg['old_email']
+new_name = cfg['new_name']
+new_email = cfg['new_email']
+mode = cfg['mode']
+
+if old_email:
+    pattern = r"(?m)^Co-authored-by: " + re.escape(old_name) + r" <" + re.escape(old_email) + r">$\n?"
+else:
+    pattern = r"(?m)^Co-authored-by: " + re.escape(old_name) + r" <[^>]*>$\n?"
+
+if mode == "remove":
+    commit.message = re.sub(pattern.encode('utf-8'), b"", commit.message)
+    if commit.message:
+        commit.message = commit.message.rstrip(b'\n') + b'\n'
+elif mode == "rewrite":
+    replacement = ("Co-authored-by: " + new_name + " <" + new_email + ">\n").encode('utf-8')
+    commit.message = re.sub(pattern.encode('utf-8'), replacement, commit.message)
+`, dataFile)
+
+	cmd := exec.Command("git", "filter-repo", "--force", "--commit-callback", pyCallback)
+	cmd.Dir = cfg.WorkDir()
+	if err := shell.RunCommand(cmd, "git-filter-repo coauthor batch"); err != nil {
+		return err
+	}
+	log.Success("Co-authored-by trailers updated")
+	return nil
+}
+
+func rewriteInteractiveFilterRepo(cfg *config.Config) error {
+	log := cfg.Logger
+	dataFile := filepath.Join(cfg.TempDir, "filter_coauthor_interactive.json")
+	data := map[string]interface{}{
+		"actions":   cfg.State.CoauthorActions,
+		"old_name":  cfg.CoauthorOldName,
+		"old_email": cfg.CoauthorOldEmail,
+		"new_name":  cfg.CoauthorNewName,
+		"new_email": cfg.CoauthorNewEmail,
+	}
+	b, err := json.Marshal(data)
+	if err != nil {
+		return err
+	}
+	if err := os.WriteFile(dataFile, b, 0644); err != nil {
+		return err
+	}
+
+	pyCallback := fmt.Sprintf(`import re, json
+with open(%q, 'r', encoding='utf-8') as f:
+    cfg = json.load(f)
+
+actions = cfg.get('actions', {})
+old_name = cfg['old_name']
+old_email = cfg['old_email']
+new_name = cfg['new_name']
+new_email = cfg['new_email']
+
+if old_email:
+    pattern = r"(?m)^Co-authored-by: " + re.escape(old_name) + r" <" + re.escape(old_email) + r">$\n?"
+else:
+    pattern = r"(?m)^Co-authored-by: " + re.escape(old_name) + r" <[^>]*>$\n?"
+
+replacement = ("Co-authored-by: " + new_name + " <" + new_email + ">\n").encode('utf-8')
+
+cid = commit.original_id.decode('ascii', errors='ignore')
+if cid in actions:
+    act = actions[cid]
+    if act == "remove":
+        commit.message = re.sub(pattern.encode('utf-8'), b"", commit.message)
+        if commit.message:
+            commit.message = commit.message.rstrip(b'\n') + b'\n'
+    elif act == "rewrite":
+        commit.message = re.sub(pattern.encode('utf-8'), replacement, commit.message)
+`, dataFile)
+
+	cmd := exec.Command("git", "filter-repo", "--force", "--commit-callback", pyCallback)
+	cmd.Dir = cfg.WorkDir()
+	if err := shell.RunCommand(cmd, "git-filter-repo coauthor interactive"); err != nil {
+		return err
+	}
+	log.Success("Co-authored-by trailers updated (interactive)")
 	return nil
 }
 

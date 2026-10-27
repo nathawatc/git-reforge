@@ -242,7 +242,6 @@ func TestRewriteCommitsInteractivePreservesUntouchedCommitMessageTrailingNewline
 	writeFile(t, filepath.Join(workDir, "f1.txt"), "1\n")
 	runGit(t, workDir, "add", "f1.txt")
 	runGit(t, workDir, "commit", "-m", "First commit\n\nSome details\n")
-	firstHash := strings.TrimSpace(runGitOutput(t, workDir, "rev-parse", "HEAD"))
 
 	writeFile(t, filepath.Join(workDir, "f2.txt"), "2\n")
 	runGit(t, workDir, "add", "f2.txt")
@@ -259,7 +258,7 @@ func TestRewriteCommitsInteractivePreservesUntouchedCommitMessageTrailingNewline
 	}
 
 	// Verify the untouched first commit preserved its exact body and trailing newline
-	firstMsg := runGitOutput(t, workDir, "log", firstHash, "-1", "--format=%B")
+	firstMsg := runGitOutput(t, workDir, "log", "HEAD~1", "-1", "--format=%B")
 	wantFirst := "First commit\n\nSome details\n\n"
 	if firstMsg != wantFirst {
 		t.Fatalf("untouched commit message = %q want %q", firstMsg, wantFirst)

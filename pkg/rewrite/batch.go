@@ -1,6 +1,7 @@
 package rewrite
 
 import (
+	"encoding/json"
 	"fmt"
 	"os"
 	"os/exec"
@@ -26,6 +27,10 @@ func RewriteCommitsBatch(cfg *config.Config) error {
 		}
 	} else {
 		log.Info(fmt.Sprintf("Rewriting commit emails to <%s> for author(s): %s", cfg.NewEmail, strings.Join(cfg.OldNames, ", ")))
+	}
+
+	if shell.HasFilterRepo() {
+		return rewriteBatchFilterRepo(cfg)
 	}
 
 	filterScript := filepath.Join(cfg.TempDir, "batch_filter.sh")
@@ -92,6 +97,10 @@ func RewriteCommitsInteractive(cfg *config.Config) error {
 	}
 	if len(cfg.State.CommitMessages) > 0 {
 		log.Info(fmt.Sprintf("  - %d message change(s)", len(cfg.State.CommitMessages)))
+	}
+
+	if shell.HasFilterRepo() {
+		return rewriteInteractiveFilterRepo(cfg)
 	}
 
 	msgFilterScript, err := generateMessageFilter(cfg)
@@ -182,4 +191,99 @@ func generateMessageFilter(cfg *config.Config) (string, error) {
 	}
 
 	return scriptPath, nil
+}
+
+func rewriteBatchFilterRepo(cfg *config.Config) error {
+	log := cfg.Logger
+	dataFile := filepath.Join(cfg.TempDir, "filter_batch.json")
+	data := map[string]interface{}{
+		"old_names": cfg.OldNames,
+		"new_name":  cfg.NewName,
+		"new_email": cfg.NewEmail,
+	}
+	b, err := json.Marshal(data)
+	if err != nil {
+		return err
+	}
+	if err := os.WriteFile(dataFile, b, 0644); err != nil {
+		return err
+	}
+
+	pyCallback := fmt.Sprintf(`import json
+with open(%q, 'r', encoding='utf-8') as f:
+    cfg = json.load(f)
+
+old_names = {n.encode('utf-8') for n in cfg['old_names']}
+new_name = cfg['new_name'].encode('utf-8')
+new_email = cfg['new_email'].encode('utf-8')
+
+if commit.author_name in old_names:
+    if new_name:
+        commit.author_name = new_name
+    commit.author_email = new_email
+
+if commit.committer_name in old_names:
+    if new_name:
+        commit.committer_name = new_name
+    commit.committer_email = new_email
+`, dataFile)
+
+	cmd := exec.Command("git", "filter-repo", "--force", "--commit-callback", pyCallback)
+	cmd.Dir = cfg.WorkDir()
+	if err := shell.RunCommand(cmd, "git-filter-repo batch"); err != nil {
+		return err
+	}
+	log.Success("Commit history rewritten successfully")
+	return nil
+}
+
+func rewriteInteractiveFilterRepo(cfg *config.Config) error {
+	log := cfg.Logger
+	dataFile := filepath.Join(cfg.TempDir, "filter_interactive.json")
+	data := map[string]interface{}{
+		"overrides": cfg.State.CommitOverrides,
+		"messages":  cfg.State.CommitMessages,
+	}
+	b, err := json.Marshal(data)
+	if err != nil {
+		return err
+	}
+	if err := os.WriteFile(dataFile, b, 0644); err != nil {
+		return err
+	}
+
+	pyCallback := fmt.Sprintf(`import json
+with open(%q, 'r', encoding='utf-8') as f:
+    cfg = json.load(f)
+
+overrides = cfg.get('overrides', {})
+messages = cfg.get('messages', {})
+
+cid = commit.original_id.decode('ascii', errors='ignore')
+if cid in overrides:
+    ov = overrides[cid]
+    if not ov.get('Skip'):
+        name = ov.get('Name')
+        if name:
+            commit.author_name = name.encode('utf-8')
+            commit.committer_name = name.encode('utf-8')
+        email = ov.get('Email')
+        if email:
+            commit.author_email = email.encode('utf-8')
+            commit.committer_email = email.encode('utf-8')
+
+if cid in messages:
+    msg = messages[cid]
+    if not msg.endswith('\n'):
+        msg += '\n'
+    commit.message = msg.encode('utf-8')
+`, dataFile)
+
+	cmd := exec.Command("git", "filter-repo", "--force", "--commit-callback", pyCallback)
+	cmd.Dir = cfg.WorkDir()
+	if err := shell.RunCommand(cmd, "git-filter-repo interactive"); err != nil {
+		return err
+	}
+	log.Success("Commit history rewritten successfully")
+	return nil
 }

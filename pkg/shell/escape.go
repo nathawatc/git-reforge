@@ -17,6 +17,11 @@ func RunCommand(cmd *exec.Cmd, description string) error {
 	return nil
 }
 
+func HasFilterRepo() bool {
+	_, err := exec.LookPath("git-filter-repo")
+	return err == nil
+}
+
 func EscapeDoubleQuoted(s string) string {
 	s = strings.ReplaceAll(s, "\\", "\\\\")
 	s = strings.ReplaceAll(s, "\"", "\\\"")

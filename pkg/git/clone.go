@@ -167,7 +167,11 @@ func Push(cfg *config.Config) error {
 	cmd := exec.Command("git", "remote", "set-url", "origin", destURL)
 	cmd.Dir = tmpDir + "/working"
 	if err := shell.RunCommand(cmd, "set remote origin URL"); err != nil {
-		return fmt.Errorf("failed to set remote URL: %w", err)
+		cmd = exec.Command("git", "remote", "add", "origin", destURL)
+		cmd.Dir = tmpDir + "/working"
+		if err := shell.RunCommand(cmd, "add remote origin"); err != nil {
+			return fmt.Errorf("failed to set remote URL: %w", err)
+		}
 	}
 
 	// Push all branches
