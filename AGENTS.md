@@ -43,7 +43,7 @@ pkg/
 	migration/run.go      # Run lifecycle + cleanupTempDir; owns clone → rewrite → coauthor → signing → save/push → summary
 	migration/run_test.go # cleanupTempDir unit test
 	migration/run_integration_test.go # end-to-end pipeline against local repos
-	git/clone.go          # Clone (bare mirror → working), push/save, failed-push recovery, temp cleanup
+	git/clone.go          # Clone directly to working, push/save, failed-push recovery, temp cleanup
 	logging/logger.go     # slog wrapper with ANSI colors (imports pkg/ui)
 	rewrite/batch.go      # RewriteCommitsBatch, RewriteCommitsInteractive, filter generation
 	coauthor/batch.go     # RunCoauthorPhase, batch/interactive coauthor filtering

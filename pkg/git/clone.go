@@ -37,18 +37,18 @@ func Clone(cfg *config.Config) error {
 	}()
 	log.Info("Created temporary directory: " + tmpDir)
 
-	// Clone as bare mirror
-	log.Info("Cloning as bare mirror...")
-	cmd := exec.Command("git", "clone", "--mirror", cfg.SourceURL, tmpDir+"/repo.git")
-	if err := shell.RunCommand(cmd, "git clone mirror"); err != nil {
+	workDir := cfg.WorkDir()
+	log.Info("Cloning repository into working directory...")
+	cmd := exec.Command("git", "clone", cfg.SourceURL, workDir)
+	if err := shell.RunCommand(cmd, "git clone"); err != nil {
 		return fmt.Errorf("failed to clone repository: %w", err)
 	}
 
-	// Convert to working repository
-	log.Info("Converting to working repository...")
-	err = convertBareToWorking(tmpDir)
-	if err != nil {
-		return fmt.Errorf("failed to convert mirror to working repository: %w", err)
+	if err := createLocalBranchesFromOrigin(workDir); err != nil {
+		return err
+	}
+	if err := checkoutFirstAvailableBranch(workDir); err != nil {
+		return err
 	}
 
 	log.Success("Repository cloned successfully")

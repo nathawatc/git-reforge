@@ -79,7 +79,7 @@ exit 0
 	}
 }
 
-func TestCloneCreatesMirrorAndWorkingRepository(t *testing.T) {
+func TestCloneCreatesWorkingRepository(t *testing.T) {
 	if _, err := exec.LookPath("git"); err != nil {
 		t.Skip("git not available")
 	}
@@ -121,11 +121,11 @@ func TestCloneCreatesMirrorAndWorkingRepository(t *testing.T) {
 		}
 	})
 
-	if _, err := os.Stat(filepath.Join(cfg.TempDir, "repo.git")); err != nil {
-		t.Fatalf("mirror repo missing: %v", err)
-	}
 	if _, err := os.Stat(filepath.Join(cfg.TempDir, "working", ".git")); err != nil {
 		t.Fatalf("working repo missing: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(cfg.TempDir, "repo.git")); !os.IsNotExist(err) {
+		t.Fatalf("expected redundant repo.git to not exist, got err = %v", err)
 	}
 
 	refs := runGitOutput(t, filepath.Join(cfg.TempDir, "working"), "for-each-ref", "--format=%(refname)")
