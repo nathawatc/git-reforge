@@ -41,36 +41,33 @@ func RewriteCommitsBatch(cfg *config.Config) error {
 
 	filterScript := filepath.Join(cfg.TempDir, "batch_filter.sh")
 
-	// Build the filter script
-	var script strings.Builder
-	script.WriteString(`#!/usr/bin/env bash
-OLD_NAMES_ARRAY=(
-`)
+	var patterns []string
 	for _, name := range cfg.OldNames {
-		fmt.Fprintf(&script, "    %s\n", shell.QuoteSingle(name))
+		patterns = append(patterns, shell.QuoteSingle(name))
 	}
-	script.WriteString(`)
+	patternList := strings.Join(patterns, "|")
 
-for old_name in "${OLD_NAMES_ARRAY[@]}"; do
-	if [ "$GIT_AUTHOR_NAME" = "$old_name" ]; then
-		if [ -n "$FILTER_NEW_NAME" ]; then
-			export GIT_AUTHOR_NAME="$FILTER_NEW_NAME"
-		fi
-		export GIT_AUTHOR_EMAIL="$FILTER_NEW_EMAIL"
-		break
-	fi
-done
+	// Build the filter script using portable POSIX sh
+	var script strings.Builder
+	script.WriteString("#!/usr/bin/env sh\n")
+	fmt.Fprintf(&script, `case "$GIT_AUTHOR_NAME" in
+    %s)
+        if [ -n "$FILTER_NEW_NAME" ]; then
+            export GIT_AUTHOR_NAME="$FILTER_NEW_NAME"
+        fi
+        export GIT_AUTHOR_EMAIL="$FILTER_NEW_EMAIL"
+        ;;
+esac
 
-for old_name in "${OLD_NAMES_ARRAY[@]}"; do
-	if [ "$GIT_COMMITTER_NAME" = "$old_name" ]; then
-		if [ -n "$FILTER_NEW_NAME" ]; then
-			export GIT_COMMITTER_NAME="$FILTER_NEW_NAME"
-		fi
-		export GIT_COMMITTER_EMAIL="$FILTER_NEW_EMAIL"
-		break
-	fi
-done
-`)
+case "$GIT_COMMITTER_NAME" in
+    %s)
+        if [ -n "$FILTER_NEW_NAME" ]; then
+            export GIT_COMMITTER_NAME="$FILTER_NEW_NAME"
+        fi
+        export GIT_COMMITTER_EMAIL="$FILTER_NEW_EMAIL"
+        ;;
+esac
+`, patternList, patternList)
 
 	if err := os.WriteFile(filterScript, []byte(script.String()), 0755); err != nil {
 		return fmt.Errorf("failed to write filter script: %w", err)
