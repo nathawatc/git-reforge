@@ -4,6 +4,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
@@ -297,6 +298,39 @@ func TestPruneOriginalRefsRemovesBackupRefs(t *testing.T) {
 	}
 	if len(refsAfter) != 0 {
 		t.Fatalf("refs/original still exists after prune: %v", refsAfter)
+	}
+}
+
+func TestBranchRefspecsPrefersLocalBranches(t *testing.T) {
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skip("git not available")
+	}
+
+	workDir := filepath.Join(t.TempDir(), "repo")
+	if err := os.Mkdir(workDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	runGit(t, workDir, "init")
+	runGit(t, workDir, "config", "user.name", "Test User")
+	runGit(t, workDir, "config", "user.email", "test@example.org")
+	writeFile(t, filepath.Join(workDir, "file.txt"), "hello\n")
+	runGit(t, workDir, "add", "file.txt")
+	runGit(t, workDir, "commit", "-m", "init")
+	runGit(t, workDir, "branch", "-M", "main")
+	head := strings.TrimSpace(runGitOutput(t, workDir, "rev-parse", "HEAD"))
+	runGit(t, workDir, "update-ref", "refs/remotes/origin/main", head)
+
+	refspecs, err := branchRefspecs(workDir)
+	if err != nil {
+		t.Fatalf("branchRefspecs() error = %v", err)
+	}
+	for _, refspec := range refspecs {
+		if strings.HasPrefix(refspec, "refs/remotes/origin/main:") {
+			t.Fatalf("branchRefspecs returned remote refspec %q; want local refs/heads/main", refspec)
+		}
+	}
+	if !slices.Contains(refspecs, "refs/heads/main:refs/heads/main") {
+		t.Fatalf("branchRefspecs %v does not contain local refs/heads/main:refs/heads/main", refspecs)
 	}
 }
 

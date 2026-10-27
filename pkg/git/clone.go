@@ -228,18 +228,6 @@ func pushTags(tmpDir string) error {
 func branchRefspecs(workDir string) ([]string, error) {
 	refspecsByBranch := make(map[string]string)
 
-	localRefs, err := listRefs(workDir, "refs/heads")
-	if err != nil {
-		return nil, err
-	}
-	for _, ref := range localRefs {
-		branchName := strings.TrimPrefix(ref, "refs/heads/")
-		if branchName == "" || branchName == ref {
-			continue
-		}
-		refspecsByBranch[branchName] = ref + ":refs/heads/" + branchName
-	}
-
 	remoteRefs, err := listRefs(workDir, "refs/remotes/origin")
 	if err != nil {
 		return nil, err
@@ -249,6 +237,18 @@ func branchRefspecs(workDir string) ([]string, error) {
 			continue
 		}
 		branchName := strings.TrimPrefix(ref, "refs/remotes/origin/")
+		if branchName == "" || branchName == ref {
+			continue
+		}
+		refspecsByBranch[branchName] = ref + ":refs/heads/" + branchName
+	}
+
+	localRefs, err := listRefs(workDir, "refs/heads")
+	if err != nil {
+		return nil, err
+	}
+	for _, ref := range localRefs {
+		branchName := strings.TrimPrefix(ref, "refs/heads/")
 		if branchName == "" || branchName == ref {
 			continue
 		}
