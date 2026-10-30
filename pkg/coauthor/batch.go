@@ -149,11 +149,11 @@ new_email = cfg.get('new_email', '')
 patterns = []
 for t in targets:
     if t.get('name') and t.get('email'):
-        patterns.append(r"(?m)^Co-authored-by: " + re.escape(t['name']) + r" <" + re.escape(t['email']) + r">\r?$\n?")
+        patterns.append(r"(?m)^Co-authored-by:\s*" + re.escape(t['name']) + r"\s*<" + re.escape(t['email']) + r">(\r?\n)?")
     elif t.get('email'):
-        patterns.append(r"(?m)^Co-authored-by: [^<\r\n]*<" + re.escape(t['email']) + r">\r?$\n?")
+        patterns.append(r"(?m)^Co-authored-by:[^<\r\n]*<" + re.escape(t['email']) + r">\s*(\r?\n)?")
     else:
-        patterns.append(r"(?m)^Co-authored-by: " + re.escape(t['name']) + r" <[^>\r\n]*>\r?$\n?")
+        patterns.append(r"(?m)^Co-authored-by:\s*" + re.escape(t['name']) + r"(\s*<[^>\r\n]*>)?(\r?\n)?")
 
 replacement = ("Co-authored-by: " + new_name + " <" + new_email + ">\n").encode('utf-8')
 
