@@ -21,60 +21,17 @@ func RewriteBatch(cfg *config.Config) error {
 
 	log := cfg.Logger
 	log.Header("Rewriting Co-authored-by Trailers")
-
-	if shell.HasFilterRepo() {
-		return rewriteBatchFilterRepo(cfg)
-	}
-
-	coauthorMsgFilter := filepath.Join(cfg.TempDir, "coauthor_msg_filter.sh")
-	if err := buildCoauthorMsgFilter(cfg, coauthorMsgFilter, "batch"); err != nil {
-		return err
-	}
-
-	log.Info("Applying Co-authored-by " + cfg.CoauthorMode + " to all commits...")
-	cmd := exec.Command("git", "filter-branch", "-f",
-		"--msg-filter", "sh "+shell.QuoteSingle(coauthorMsgFilter),
-		"--tag-name-filter", "cat", "--", "--all")
-	cmd.Dir = cfg.WorkDir()
-	if err := shell.RunCommand(cmd, "filter-branch"); err != nil {
-		return err
-	}
-
-	log.Success("Co-authored-by trailers updated")
-	return nil
+	return rewriteBatchFilterRepo(cfg)
 }
 
 func RewriteInteractive(cfg *config.Config) error {
-	if cfg.CoauthorMode != "interactive" {
-		return nil
-	}
-	if len(cfg.State.CoauthorActions) == 0 {
+	if cfg.CoauthorMode != "interactive" || len(cfg.State.CoauthorActions) == 0 {
 		return nil
 	}
 
 	log := cfg.Logger
 	log.Header("Applying Co-authored-by Interactive Decisions")
-
-	if shell.HasFilterRepo() {
-		return rewriteInteractiveFilterRepo(cfg)
-	}
-
-	coauthorMsgFilter := filepath.Join(cfg.TempDir, "coauthor_msg_filter.sh")
-	if err := buildCoauthorMsgFilter(cfg, coauthorMsgFilter, "interactive"); err != nil {
-		return err
-	}
-
-	log.Info(fmt.Sprintf("Applying %d Co-authored-by decision(s)...", len(cfg.State.CoauthorActions)))
-	cmd := exec.Command("git", "filter-branch", "-f",
-		"--msg-filter", "sh "+shell.QuoteSingle(coauthorMsgFilter),
-		"--tag-name-filter", "cat", "--", "--all")
-	cmd.Dir = cfg.WorkDir()
-	if err := shell.RunCommand(cmd, "filter-branch"); err != nil {
-		return err
-	}
-
-	log.Success("Co-authored-by trailers updated (interactive)")
-	return nil
+	return rewriteInteractiveFilterRepo(cfg)
 }
 
 type coauthorTarget struct {
@@ -107,75 +64,6 @@ func parseCoauthorTargets(cfg *config.Config) []coauthorTarget {
 		}
 	}
 	return targets
-}
-
-func sedPatternForTarget(t coauthorTarget) string {
-	if t.Name != "" && t.Email != "" {
-		return "Co-authored-by: " + shell.EscapeSed(t.Name) + " <" + shell.EscapeSed(t.Email) + ">"
-	}
-	if t.Email != "" {
-		return "Co-authored-by: [^<]*<" + shell.EscapeSed(t.Email) + ">"
-	}
-	return "Co-authored-by: " + shell.EscapeSed(t.Name) + " <[^>]*>"
-}
-
-func buildSedCommands(targets []coauthorTarget, mode string, newTrailer string) string {
-	var cmds []string
-	for _, t := range targets {
-		pattern := sedPatternForTarget(t)
-		if mode == "remove" {
-			cmds = append(cmds, fmt.Sprintf("-e %s", shell.QuoteSingle(fmt.Sprintf("/^%s\\r?$/d", pattern))))
-		} else {
-			cmds = append(cmds, fmt.Sprintf("-e %s", shell.QuoteSingle(fmt.Sprintf("s/^%s\\r?$/%s/", pattern, newTrailer))))
-		}
-	}
-	return strings.Join(cmds, " ")
-}
-
-func buildCoauthorMsgFilter(cfg *config.Config, outputPath string, modeType string) error {
-	targets := parseCoauthorTargets(cfg)
-	if len(targets) == 0 {
-		return fmt.Errorf("coauthor-from is required for coauthor operations")
-	}
-
-	var script strings.Builder
-
-	script.WriteString("#!/usr/bin/env sh\n")
-
-	sedEscapedNewName := shell.EscapeSedReplacement(cfg.CoauthorNewName)
-	sedEscapedNewEmail := shell.EscapeSedReplacement(cfg.CoauthorNewEmail)
-	newTrailer := "Co-authored-by: " + sedEscapedNewName + " <" + sedEscapedNewEmail + ">"
-
-	if modeType == "batch" {
-		fmt.Fprintf(&script, "sed -E %s\n", buildSedCommands(targets, cfg.CoauthorMode, newTrailer))
-	} else {
-		script.WriteString("case \"$GIT_COMMIT\" in\n")
-		for hash, action := range cfg.State.CoauthorActions {
-			switch action {
-			case "remove":
-				fmt.Fprintf(&script, "    %s)\n", hash)
-				fmt.Fprintf(&script, "        sed -E %s\n", buildSedCommands(targets, "remove", newTrailer))
-				script.WriteString("        ;;\n")
-			case "rewrite":
-				fmt.Fprintf(&script, "    %s)\n", hash)
-				fmt.Fprintf(&script, "        sed -E %s\n", buildSedCommands(targets, "rewrite", newTrailer))
-				script.WriteString("        ;;\n")
-			default:
-				fmt.Fprintf(&script, "    %s)\n", hash)
-				fmt.Fprintf(&script, "        cat\n")
-				script.WriteString("        ;;\n")
-			}
-		}
-		script.WriteString("    *)\n")
-		script.WriteString("        cat\n")
-		script.WriteString("        ;;\nesac\n")
-	}
-
-	if err := os.WriteFile(outputPath, []byte(script.String()), 0755); err != nil {
-		return fmt.Errorf("failed to write coauthor filter script: %w", err)
-	}
-
-	return nil
 }
 
 func rewriteBatchFilterRepo(cfg *config.Config) error {

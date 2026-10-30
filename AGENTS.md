@@ -53,9 +53,9 @@ pkg/
 	migration/
 		run.go          # Run lifecycle + cleanupTempDir (orchestrates clone → rewrite → coauthor → signing → save/push)
 	rewrite/
-		batch.go        # RewriteCommitsBatch, RewriteCommitsInteractive (filter-repo & filter-branch engines)
+		batch.go        # RewriteCommitsBatch, RewriteCommitsInteractive (git-filter-repo engine)
 	shell/
-		escape.go       # RunCommand (captures stderr), HasFilterRepo, QuoteSingle, EscapeSed
+		escape.go       # RunCommand (captures stderr), QuoteSingle
 	signing/
 		commit.go       # HandleSigning (keep/none/gpg/ssh), ResignTags, tagger metadata preservation
 	logging/
@@ -72,7 +72,8 @@ pkg/
 1. `main()` initializes `logging.Logger` and `config.New()`, parses positional arguments
    (`<source> [dest]`) and CLI flags via `urfave/cli/v3`.
 2. `config.Validate(cfg)` verifies URLs, author requirements, signing mode, and directory existence.
-3. `config.CheckDependencies(cfg)` confirms presence of `git` and signing binaries (`gpg` / `ssh-keygen`).
+3. `config.CheckDependencies(cfg)` confirms presence of `git`, `git-filter-repo`, and signing
+   binaries (`gpg` / `ssh-keygen`).
 4. `ui.DisplayConfig(cfg)` displays configuration; if `cfg.Yes` is set, skips confirmation prompt.
 5. `migration.Run(cfg)` executes the migration pipeline:
    - `git.Clone(cfg)`: clones repository directly into `$TEMP_DIR/working` and checks out local branches.
@@ -92,17 +93,13 @@ pkg/
 
 ## Technical Invariants & Key Decisions
 
-### History Rewriting Engines (`pkg/rewrite`, `pkg/coauthor`, `pkg/signing`)
+### History Rewriting Engine (`pkg/rewrite`, `pkg/coauthor`, `pkg/signing`)
 
-- **Dual-engine strategy**: The codebase checks `shell.HasFilterRepo()` at runtime.
-  - If `git-filter-repo` is available, it is preferred for execution (~0.05s per pass). It passes Python
-    callbacks with sidecar JSON configuration files written to `$TEMP_DIR`.
-  - If `git-filter-repo` is absent, it falls back to POSIX-compliant `git filter-branch` scripts.
-- **POSIX shell scripts**: When using `filter-branch`, scripts must use `#!/usr/bin/env sh`, `.` sourcing
-  (not `source`), and `case ... in` patterns (not Bash arrays `arr=(...)`), ensuring compatibility on
-  Debian/Ubuntu (`dash`), Alpine (`ash`), and macOS/BSD.
-- **Message streaming**: Message filter scripts must stream input (`cat` or `sed`) rather than capturing
-  into shell variables (`var=$(cat)`), preventing command substitution from stripping trailing newlines.
+- **git-filter-repo engine**: The pipeline requires `git-filter-repo` as a prerequisite dependency.
+  - History rewriting executes via Python callbacks (`--commit-callback`) with sidecar JSON
+    configuration files written to `$TEMP_DIR`.
+  - Avoids shell quoting overhead, variable expansion bugs, and command substitution newline
+    stripping.
 
 ### Git Commit Metadata SSOT (`pkg/git/clone.go`)
 
@@ -158,5 +155,3 @@ No external git library (such as `go-git`) is used; commit hashes are native Go 
 - All external commands must use `shell.RunCommand(cmd, description)`.
 - `shell.RunCommand` captures `cmd.CombinedOutput()` and formats errors with command stderr output.
 - Paths and shell script arguments must be escaped using `shell.QuoteSingle(path)`.
-<!-- rumdl-disable-next-line MD013 -->
-- Coauthor regex patterns use `shell.EscapeSed` for matching and `shell.EscapeSedReplacement` for replacement.

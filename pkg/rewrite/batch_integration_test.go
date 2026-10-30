@@ -412,60 +412,6 @@ func TestRewriteCommitsBatchStripTitleAndBody(t *testing.T) {
 	}
 }
 
-func TestRewriteCommitsBatchFilterBranchStripFallback(t *testing.T) {
-	if _, err := exec.LookPath("git"); err != nil {
-		t.Skip("git not available")
-	}
-
-	// Create bin dir mirroring /usr/bin without git-filter-repo to test filter-branch fallback
-	binDir := t.TempDir()
-	entries, err := os.ReadDir("/usr/bin")
-	if err != nil {
-		t.Skip("cannot read /usr/bin")
-	}
-	for _, entry := range entries {
-		if entry.Name() == "git-filter-repo" {
-			continue
-		}
-		_ = os.Symlink(filepath.Join("/usr/bin", entry.Name()), filepath.Join(binDir, entry.Name()))
-	}
-	t.Setenv("PATH", binDir)
-
-	tmpDir := t.TempDir()
-	workDir := filepath.Join(tmpDir, "working")
-	if err := os.Mkdir(workDir, 0755); err != nil {
-		t.Fatal(err)
-	}
-
-	runGit(t, workDir, "init")
-	runGit(t, workDir, "config", "user.name", "Old User")
-	runGit(t, workDir, "config", "user.email", "old@example.org")
-	runGit(t, workDir, "config", "commit.gpgsign", "false")
-
-	writeFile(t, filepath.Join(workDir, "f.txt"), "hello\n")
-	runGit(t, workDir, "add", "f.txt")
-	runGit(t, workDir, "commit", "-m", "chore: setup repo (#1)\n\nReviewed-on: https://example.com/1\n")
-
-	cfg := config.New()
-	cfg.TempDir = tmpDir
-	cfg.OldNames = []string{"Old User"}
-	cfg.NewName = "New User"
-	cfg.NewEmail = "new@example.org"
-	cfg.StripTitlePatterns = []string{`\s*\(#\d+\)`}
-	cfg.StripBodyPatterns = []string{`^Reviewed-on:.*$`}
-	cfg.Logger = testLogger{}
-
-	if err := RewriteCommitsBatch(cfg); err != nil {
-		t.Fatalf("RewriteCommitsBatch() error = %v", err)
-	}
-
-	msg := runGitOutput(t, workDir, "log", "--format=%B", "-1")
-	want := "chore: setup repo\n"
-	if strings.TrimSpace(msg) != strings.TrimSpace(want) {
-		t.Fatalf("filter-branch fallback rewritten message = %q want %q", msg, want)
-	}
-}
-
 func TestRewriteCommitsBatchMatchesAuthorAndCommitterByEmailOrIdentity(t *testing.T) {
 	if _, err := exec.LookPath("git"); err != nil {
 		t.Skip("git not available")

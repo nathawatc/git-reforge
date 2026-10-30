@@ -18,7 +18,7 @@ func (testLogger) Success(string) {}
 func (testLogger) Warning(string) {}
 func (testLogger) Error(string)   {}
 
-func TestRewriteBatchRewritesCoauthorTrailerWithSedSpecialReplacement(t *testing.T) {
+func TestRewriteBatchRewritesCoauthorTrailerWithSpecialCharacters(t *testing.T) {
 	if _, err := exec.LookPath("git"); err != nil {
 		t.Skip("git not available")
 	}

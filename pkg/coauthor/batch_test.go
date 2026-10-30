@@ -1,85 +1,11 @@
 package coauthor
 
 import (
-	"os"
-	"path/filepath"
 	"strings"
 	"testing"
 
 	"git-reforge/pkg/config"
-	"git-reforge/pkg/shell"
 )
-
-func TestEscapeSed(t *testing.T) {
-	tests := []struct {
-		input    string
-		expected string
-	}{
-		{"simple", "simple"},
-		{"with/slash", `with\/slash`},
-		{"with[brackets]", `with\[brackets\]`},
-		{"with.dot", `with\.dot`},
-	}
-
-	for _, tt := range tests {
-		got := shell.EscapeSed(tt.input)
-		if got != tt.expected {
-			t.Errorf("EscapeSed(%q) = %q want %q", tt.input, got, tt.expected)
-		}
-	}
-}
-
-func TestBuildCoauthorMsgFilterEscapesReplacementOnlyAsReplacement(t *testing.T) {
-	cfg := config.New()
-	cfg.TempDir = t.TempDir()
-	cfg.CoauthorMode = "rewrite"
-	cfg.CoauthorFrom = []string{"Alice"}
-	cfg.CoauthorNewName = "New.Name & Co"
-	cfg.CoauthorNewEmail = "new/name@example.org"
-	outputPath := filepath.Join(cfg.TempDir, "coauthor_msg_filter.sh")
-
-	if err := buildCoauthorMsgFilter(cfg, outputPath, "batch"); err != nil {
-		t.Fatalf("buildCoauthorMsgFilter() error = %v", err)
-	}
-
-	contents, err := os.ReadFile(outputPath)
-	if err != nil {
-		t.Fatal(err)
-	}
-	script := string(contents)
-	if !strings.Contains(script, `Co-authored-by: New.Name \& Co <new\/name@example.org>`) {
-		t.Fatalf("script does not contain correctly escaped replacement:\n%s", script)
-	}
-	if strings.Contains(script, `New\.Name`) || strings.Contains(script, `example\.org`) {
-		t.Fatalf("script escaped replacement text as a regex pattern:\n%s", script)
-	}
-}
-
-func TestBuildCoauthorMsgFilterMultipleTargets(t *testing.T) {
-	cfg := config.New()
-	cfg.TempDir = t.TempDir()
-	cfg.CoauthorMode = "rewrite"
-	cfg.CoauthorFrom = []string{"Alice", "Bob <bob@example.com>"}
-	cfg.CoauthorNewName = "New Author"
-	cfg.CoauthorNewEmail = "new@example.com"
-	outputPath := filepath.Join(cfg.TempDir, "coauthor_msg_filter.sh")
-
-	if err := buildCoauthorMsgFilter(cfg, outputPath, "batch"); err != nil {
-		t.Fatalf("buildCoauthorMsgFilter() error = %v", err)
-	}
-
-	contents, err := os.ReadFile(outputPath)
-	if err != nil {
-		t.Fatal(err)
-	}
-	script := string(contents)
-	if !strings.Contains(script, "Co-authored-by: Alice <[^>]*>") {
-		t.Fatalf("script missing Alice pattern:\n%s", script)
-	}
-	if !strings.Contains(script, `Co-authored-by: Bob <bob@example\.com>`) {
-		t.Fatalf("script missing Bob pattern:\n%s", script)
-	}
-}
 
 func TestMatchesCoauthor(t *testing.T) {
 	tests := []struct {

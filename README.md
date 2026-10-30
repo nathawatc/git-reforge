@@ -5,8 +5,7 @@ migrate seamlessly across Git forges (GitHub, Codeberg, Forgejo, GitLab).
 
 ## Features
 
-- **Fast Dual-Engine Rewriting** - Uses `git-filter-repo` when installed for near-instant rewrites,
-  with automatic fallback to Git's built-in `git filter-branch`.
+- **Fast History Rewriting** - Uses `git-filter-repo` for near-instant history rewrites.
 - **Author Rewriting** - Change author and committer names and emails across all commits.
 - **Multiple Author Support** - Replace commits originating from multiple historical authors.
 - **Interactive Mode** - Review and customize changes per commit:
@@ -29,8 +28,8 @@ migrate seamlessly across Git forges (GitHub, Codeberg, Forgejo, GitLab).
 ## Requirements
 
 - Git 2.20+
+- `git-filter-repo` (required)
 - Go 1.24+ (required only if building from source)
-- `git-filter-repo` (optional but strongly recommended for high-speed rewrites)
 - GPG (optional, for GPG signing)
 - SSH (optional, for SSH signing)
 - Access to source and destination Git repositories
