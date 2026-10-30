@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"git-reforge/pkg/config"
+	"git-reforge/pkg/git"
 )
 
 func DisplayConfig(cfg *config.Config) {
@@ -167,4 +168,95 @@ func ShowSummary(cfg *config.Config) {
 	}
 
 	fmt.Println()
+}
+
+func PromptSaveOrCleanup(cfg *config.Config, failedStep string) (retErr error) {
+	if cfg.SaveDir != "" {
+		cfg.Logger.Warning("Push failed during " + failedStep + ".")
+		cfg.Logger.Info("The rewritten repository will still be saved to: " + cfg.SaveDir)
+		return nil
+	}
+
+	prompts := NewPromptSession()
+	defer func() {
+		if err := prompts.Close(); err != nil && retErr == nil {
+			retErr = fmt.Errorf("failed to close prompt session: %w", err)
+		}
+	}()
+
+	if !prompts.HasTTY() {
+		return fmt.Errorf("failed during %s and no terminal is available to choose save or cleanup", failedStep)
+	}
+
+	if _, err := prompts.Printf(
+		"\n"+
+			"The %s to destination repository failed.\n"+
+			"The rewritten repository is still available in the temporary directory.\n"+
+			"\n"+
+			"  [S]ave    - copy the rewritten repository to a local path\n"+
+			"  [C]leanup - discard the temporary directory and exit\n"+
+			"\n",
+		failedStep,
+	); err != nil {
+		return fmt.Errorf("failed to write push recovery message: %w", err)
+	}
+
+	for {
+		choice, err := prompts.ReadLine("  Choice [S/C]: ")
+		if err != nil {
+			return fmt.Errorf("failed to read push recovery choice: %w", err)
+		}
+
+		switch strings.ToUpper(strings.TrimSpace(choice)) {
+		case "S":
+			return promptSavePath(cfg, prompts)
+		case "C":
+			cfg.Logger.Info("Cleanup selected. The temporary directory will be removed on exit.")
+			if err := os.RemoveAll(cfg.TempDir); err != nil {
+				return fmt.Errorf("failed to clean up temp directory %s: %w", cfg.TempDir, err)
+			}
+			cfg.TempDir = ""
+			return nil
+		default:
+			cfg.Logger.Warning("Invalid choice. Please enter S to save or C to clean up.")
+		}
+	}
+}
+
+func promptSavePath(cfg *config.Config, prompts *PromptSession) error {
+	for {
+		savePath, err := prompts.ReadLine("  Enter destination path: ")
+		if err != nil {
+			return fmt.Errorf("failed to read save path: %w", err)
+		}
+
+		savePath = strings.TrimSpace(savePath)
+		if savePath == "" {
+			cfg.Logger.Warning("Path cannot be empty. Please enter a valid directory path.")
+			continue
+		}
+		if _, err := os.Stat(savePath); err == nil {
+			cfg.Logger.Warning("Path already exists: " + savePath + " - choose a path that does not exist.")
+			continue
+		}
+
+		cfg.Logger.Info("Saving rewritten repository to: " + savePath)
+		if err := git.Save(cfg.WorkDir(), savePath); err != nil {
+			return fmt.Errorf("failed to save repository to %s: %w", savePath, err)
+		}
+
+		cfg.Logger.Success("Repository saved to: " + savePath)
+		cfg.Logger.Info("You can push it later with:")
+		if _, err := prompts.Printf(
+			"    cd %s\n"+
+				"    git remote set-url origin %s\n"+
+				"    git push --all --force\n"+
+				"    git push --force origin \"refs/tags/*:refs/tags/*\"\n",
+			savePath,
+			cfg.DestURL,
+		); err != nil {
+			return fmt.Errorf("failed to write save instructions: %w", err)
+		}
+		return nil
+	}
 }

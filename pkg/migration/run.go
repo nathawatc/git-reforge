@@ -53,6 +53,9 @@ func Run(cfg *config.Config) (retErr error) {
 
 	if !cfg.NoPush {
 		if err := git.Push(cfg); err != nil {
+			if saveErr := ui.PromptSaveOrCleanup(cfg, "push"); saveErr != nil {
+				return saveErr
+			}
 			return err
 		}
 	} else {

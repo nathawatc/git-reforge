@@ -21,6 +21,14 @@ func NewPromptSession() *PromptSession {
 	return &PromptSession{reader: bufio.NewReader(os.Stdin), output: os.Stdout}
 }
 
+func (p *PromptSession) HasTTY() bool {
+	return p.file != nil
+}
+
+func (p *PromptSession) Printf(format string, a ...any) (int, error) {
+	return fmt.Fprintf(p.output, format, a...)
+}
+
 func (p *PromptSession) Close() error {
 	if p.file == nil {
 		return nil
