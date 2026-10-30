@@ -230,35 +230,19 @@ func ResignTags(cfg *config.Config) error {
 	return nil
 }
 
-func getTagMessage(tmpDir string, tagName string) (string, string, error) {
-	cmd := exec.Command("git", "tag", "-l", "--format=%(contents:subject)", tagName)
+func getTagRecreateMessage(tmpDir string, tagName string) (string, error) {
+	cmd := exec.Command("git", "tag", "-l", "--format=%(contents:subject)%00%(contents:body)", tagName)
 	cmd.Dir = tmpDir + "/working"
 	output, err := cmd.Output()
 	if err != nil {
-		return "", "", fmt.Errorf("git tag subject failed: %w", err)
+		return "", fmt.Errorf("git tag contents failed: %w", err)
 	}
-	subject := trimCommandTrailingNewlines(string(output))
-
-	cmd = exec.Command("git", "tag", "-l", "--format=%(contents:body)", tagName)
-	cmd.Dir = tmpDir + "/working"
-	output, err = cmd.Output()
-	if err != nil {
-		return "", "", fmt.Errorf("git tag body failed: %w", err)
+	parts := strings.SplitN(string(output), "\x00", 2)
+	subject := strings.TrimRight(parts[0], "\n")
+	if len(parts) < 2 {
+		return subject, nil
 	}
-	body := trimCommandTrailingNewlines(string(output))
-
-	return subject, body, nil
-}
-
-func trimCommandTrailingNewlines(s string) string {
-	return strings.TrimRight(s, "\n")
-}
-
-func getTagRecreateMessage(tmpDir string, tagName string) (string, error) {
-	subject, body, err := getTagMessage(tmpDir, tagName)
-	if err != nil {
-		return "", err
-	}
+	body := strings.TrimRight(parts[1], "\n")
 	if body == "" {
 		return subject, nil
 	}

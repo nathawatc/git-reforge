@@ -131,14 +131,6 @@ func TestGetTagRecreateMessagePreservesIndentedBody(t *testing.T) {
 	}
 }
 
-func TestTrimCommandTrailingNewlinesPreservesOtherWhitespace(t *testing.T) {
-	got := trimCommandTrailingNewlines("  keep spaces  \n\n")
-	want := "  keep spaces  "
-	if got != want {
-		t.Fatalf("trimCommandTrailingNewlines() = %q want %q", got, want)
-	}
-}
-
 func TestHandleNonePreservesCommitDates(t *testing.T) {
 	if _, err := exec.LookPath("git"); err != nil {
 		t.Skip("git not available")
