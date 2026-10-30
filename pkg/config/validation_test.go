@@ -124,6 +124,57 @@ func TestValidateRejectsInvalidModes(t *testing.T) {
 	}
 }
 
+func TestParseOldAuthors(t *testing.T) {
+	tests := []struct {
+		input      []string
+		wantNames  []string
+		wantEmails []string
+	}{
+		{
+			input:      []string{"nathawat <nathawat@noreply.codeberg.org>"},
+			wantNames:  []string{"nathawat"},
+			wantEmails: []string{"nathawat@noreply.codeberg.org"},
+		},
+		{
+			input:      []string{"nathawat@noreply.codeberg.org"},
+			wantNames:  nil,
+			wantEmails: []string{"nathawat@noreply.codeberg.org"},
+		},
+		{
+			input:      []string{"nathawat"},
+			wantNames:  []string{"nathawat"},
+			wantEmails: nil,
+		},
+		{
+			input:      []string{"nathawat <nathawat@noreply.codeberg.org>, Scott <scott@example.com>", "other@example.com"},
+			wantNames:  []string{"nathawat", "Scott"},
+			wantEmails: []string{"nathawat@noreply.codeberg.org", "scott@example.com", "other@example.com"},
+		},
+	}
+
+	for _, tt := range tests {
+		names, emails := ParseOldAuthors(tt.input)
+		if len(names) != len(tt.wantNames) {
+			t.Errorf("ParseOldAuthors(%v) names = %v, want %v", tt.input, names, tt.wantNames)
+		} else {
+			for i := range tt.wantNames {
+				if names[i] != tt.wantNames[i] {
+					t.Errorf("ParseOldAuthors(%v) names[%d] = %q, want %q", tt.input, i, names[i], tt.wantNames[i])
+				}
+			}
+		}
+		if len(emails) != len(tt.wantEmails) {
+			t.Errorf("ParseOldAuthors(%v) emails = %v, want %v", tt.input, emails, tt.wantEmails)
+		} else {
+			for i := range tt.wantEmails {
+				if emails[i] != tt.wantEmails[i] {
+					t.Errorf("ParseOldAuthors(%v) emails[%d] = %q, want %q", tt.input, i, emails[i], tt.wantEmails[i])
+				}
+			}
+		}
+	}
+}
+
 func TestParseOldNamesSupportsRepeatedAndCommaSeparatedValues(t *testing.T) {
 	got := ParseOldNames([]string{
 		"Old One, Old Two",

@@ -3,6 +3,7 @@ package ui
 import (
 	"fmt"
 	"os"
+	"slices"
 	"strings"
 
 	"git-reforge/pkg/config"
@@ -21,11 +22,21 @@ func DisplayConfig(cfg *config.Config) {
 	}
 	fmt.Println()
 
-	if len(cfg.OldNames) == 1 {
-		fmt.Printf("  %sOld Author:%s    %s\n", Bold, NC, cfg.OldNames[0])
-	} else {
-		fmt.Printf("  %sOld Authors:%s   %s\n", Bold, NC, cfg.OldNames[0])
-		for _, oldName := range cfg.OldNames[1:] {
+	displayedOld := cfg.OldRawAuthors
+	if len(displayedOld) == 0 {
+		displayedOld = append([]string{}, cfg.OldNames...)
+		for _, e := range cfg.OldEmails {
+			if !slices.Contains(displayedOld, e) {
+				displayedOld = append(displayedOld, e)
+			}
+		}
+	}
+
+	if len(displayedOld) == 1 {
+		fmt.Printf("  %sOld Author:%s    %s\n", Bold, NC, displayedOld[0])
+	} else if len(displayedOld) > 1 {
+		fmt.Printf("  %sOld Authors:%s   %s\n", Bold, NC, displayedOld[0])
+		for _, oldName := range displayedOld[1:] {
 			fmt.Printf("                 %s\n", oldName)
 		}
 	}
@@ -109,11 +120,21 @@ func ShowSummary(cfg *config.Config) {
 
 	fmt.Printf("  %s✓%s Repository history rewritten successfully\n", Green, NC)
 	if cfg.NewName != "" {
-		if len(cfg.OldNames) == 1 {
-			fmt.Printf("  %s✓%s Author '%s' changed to '%s'\n", Green, NC, cfg.OldNames[0], cfg.NewName)
+		displayedOld := cfg.OldRawAuthors
+		if len(displayedOld) == 0 {
+			displayedOld = append([]string{}, cfg.OldNames...)
+			for _, e := range cfg.OldEmails {
+				if !slices.Contains(displayedOld, e) {
+					displayedOld = append(displayedOld, e)
+				}
+			}
+		}
+
+		if len(displayedOld) == 1 {
+			fmt.Printf("  %s✓%s Author '%s' changed to '%s'\n", Green, NC, displayedOld[0], cfg.NewName)
 		} else {
 			fmt.Printf("  %s✓%s Authors changed to '%s':\n", Green, NC, cfg.NewName)
-			for _, oldName := range cfg.OldNames {
+			for _, oldName := range displayedOld {
 				fmt.Printf("      - %s\n", oldName)
 			}
 		}

@@ -1,18 +1,20 @@
 package config
 
 type Config struct {
-	SourceURL   string
-	DestURL     string
-	OldNames    []string
-	NewName     string
-	NewEmail    string
-	Interactive bool
-	Yes         bool
-	SignMode    string
-	GPGKey      string
-	SSHKey      string
-	SaveDir     string
-	NoPush      bool
+	SourceURL     string
+	DestURL       string
+	OldNames      []string
+	OldEmails     []string
+	OldRawAuthors []string
+	NewName       string
+	NewEmail      string
+	Interactive   bool
+	Yes           bool
+	SignMode      string
+	GPGKey        string
+	SSHKey        string
+	SaveDir       string
+	NoPush        bool
 
 	// Message stripping patterns
 	StripTitlePatterns []string

@@ -147,7 +147,8 @@ func main() {
 				cfg.CoauthorMode = "rewrite"
 			}
 
-			cfg.OldNames = config.ParseOldNames(c.StringSlice("from"))
+			cfg.OldRawAuthors = c.StringSlice("from")
+			cfg.OldNames, cfg.OldEmails = config.ParseOldAuthors(cfg.OldRawAuthors)
 			cfg.StripTitlePatterns = c.StringSlice("strip-title")
 			cfg.StripBodyPatterns = c.StringSlice("strip-body")
 

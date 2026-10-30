@@ -298,7 +298,7 @@ func taggerEnv(cfg *config.Config, info taggerInfo) []string {
 	env := os.Environ()
 	name := info.name
 	email := info.email
-	if slices.Contains(cfg.OldNames, name) {
+	if slices.Contains(cfg.OldNames, name) || slices.Contains(cfg.OldEmails, email) {
 		if cfg.NewName != "" {
 			name = cfg.NewName
 		}

@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os/exec"
 	"regexp"
+	"slices"
 	"strings"
 
 	"git-reforge/pkg/config"
@@ -14,19 +15,33 @@ func InteractiveEdit(cfg *config.Config) {
 	log := cfg.Logger
 	log.Header("Interactive Commit Editing")
 
-	log.Info("Fetching commits from author(s): " + strings.Join(cfg.OldNames, ", "))
+	var targets []string
+	if len(cfg.OldRawAuthors) > 0 {
+		targets = cfg.OldRawAuthors
+	} else {
+		targets = append(targets, cfg.OldNames...)
+		for _, e := range cfg.OldEmails {
+			if !slices.Contains(targets, e) {
+				targets = append(targets, e)
+			}
+		}
+	}
+	log.Info("Fetching commits from author(s): " + strings.Join(targets, ", "))
 
 	// Get all commits by old authors or committers
 	var commits []string
 	for _, oldName := range cfg.OldNames {
 		commits = append(commits, getCommitsByIdentity(cfg.WorkDir(), oldName)...)
 	}
+	for _, oldEmail := range cfg.OldEmails {
+		commits = append(commits, getCommitsByIdentity(cfg.WorkDir(), oldEmail)...)
+	}
 
 	// Remove duplicates
 	commits = uniqueList(commits)
 
 	if len(commits) == 0 {
-		log.Warning("No commits found from author(s): " + strings.Join(cfg.OldNames, ", "))
+		log.Warning("No commits found from author(s): " + strings.Join(targets, ", "))
 		return
 	}
 

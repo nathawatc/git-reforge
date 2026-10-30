@@ -19,6 +19,43 @@ func ParseOldNames(values []string) []string {
 	return names
 }
 
+// ParseOldAuthors parses author identities from strings that may be:
+// - "Name <email>"
+// - "email@domain.com"
+// - "Name"
+// Values may be comma-separated or repeated.
+func ParseOldAuthors(values []string) (names []string, emails []string) {
+	for _, value := range values {
+		for _, part := range splitOldNames(value) {
+			name, email := parseAuthorOrName(part)
+			if name != "" && !slices.Contains(names, name) {
+				names = append(names, name)
+			}
+			if email != "" && !slices.Contains(emails, email) {
+				emails = append(emails, email)
+			}
+			if name == "" && email == "" && !slices.Contains(names, part) {
+				names = append(names, part)
+			}
+		}
+	}
+	return names, emails
+}
+
+func parseAuthorOrName(raw string) (name, email string) {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return "", ""
+	}
+	if addr, err := mail.ParseAddress(raw); err == nil && addr.Address != "" {
+		return addr.Name, addr.Address
+	}
+	if strings.Contains(raw, "@") && !strings.Contains(raw, " ") {
+		return "", strings.Trim(raw, "<>")
+	}
+	return raw, ""
+}
+
 // ParseAuthor parses a Git author identity in "Name <email>" or bare "email" format.
 func ParseAuthor(raw string) (name, email string, err error) {
 	raw = strings.TrimSpace(raw)
@@ -45,11 +82,11 @@ func Validate(cfg *Config) error {
 		return fmt.Errorf("new author is required (-t, --to)")
 	}
 
-	if len(cfg.OldNames) == 0 {
-		return fmt.Errorf("at least one old author name is required (-f, --from)")
+	if len(cfg.OldNames) == 0 && len(cfg.OldEmails) == 0 {
+		return fmt.Errorf("at least one old author name or email is required (-f, --from)")
 	}
 
-	if slices.Contains(cfg.OldNames, "") {
+	if slices.Contains(cfg.OldNames, "") && len(cfg.OldEmails) == 0 {
 		return fmt.Errorf("empty string is not a valid old author name (-f, --from)")
 	}
 
@@ -117,7 +154,13 @@ func Validate(cfg *Config) error {
 
 	if cfg.CoauthorMode != "" {
 		if len(cfg.CoauthorFrom) == 0 {
-			cfg.CoauthorFrom = cfg.OldNames
+			if len(cfg.OldRawAuthors) > 0 {
+				cfg.CoauthorFrom = cfg.OldRawAuthors
+			} else if len(cfg.OldNames) > 0 {
+				cfg.CoauthorFrom = cfg.OldNames
+			} else {
+				cfg.CoauthorFrom = cfg.OldEmails
+			}
 		}
 		if cfg.CoauthorNewName == "" {
 			cfg.CoauthorNewName = cfg.NewName

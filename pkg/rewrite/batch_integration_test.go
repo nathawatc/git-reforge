@@ -466,6 +466,57 @@ func TestRewriteCommitsBatchFilterBranchStripFallback(t *testing.T) {
 	}
 }
 
+func TestRewriteCommitsBatchMatchesAuthorAndCommitterByEmailOrIdentity(t *testing.T) {
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skip("git not available")
+	}
+
+	tmpDir := t.TempDir()
+	workDir := filepath.Join(tmpDir, "working")
+	if err := os.Mkdir(workDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+
+	runGit(t, workDir, "init")
+	runGit(t, workDir, "config", "user.name", "Test User")
+	runGit(t, workDir, "config", "user.email", "test@example.org")
+
+	writeFile(t, filepath.Join(workDir, "file.txt"), "hello\n")
+	runGit(t, workDir, "add", "file.txt")
+	runGitWithEnv(t, workDir, []string{
+		"GIT_AUTHOR_NAME=nathawat",
+		"GIT_AUTHOR_EMAIL=nathawat@noreply.codeberg.org",
+		"GIT_AUTHOR_DATE=2024-01-01T12:00:00+00:00",
+		"GIT_COMMITTER_NAME=Scott",
+		"GIT_COMMITTER_EMAIL=nathawat@noreply.codeberg.org",
+		"GIT_COMMITTER_DATE=2024-01-01T12:00:00+00:00",
+	}, "commit", "-m", "initial commit")
+
+	cfg := config.New()
+	cfg.TempDir = tmpDir
+	cfg.Logger = testLogger{}
+	cfg.OldRawAuthors = []string{"nathawat <nathawat@noreply.codeberg.org>"}
+	cfg.OldNames, cfg.OldEmails = config.ParseOldAuthors(cfg.OldRawAuthors)
+	cfg.NewName = "Scott-Nx"
+	cfg.NewEmail = "158021536+Scott-Nx@users.noreply.github.com"
+
+	if err := RewriteCommitsBatch(cfg); err != nil {
+		t.Fatalf("RewriteCommitsBatch failed: %v", err)
+	}
+
+	gotAuthor := strings.TrimSpace(runGitOutput(t, workDir, "log", "-1", "--format=%an <%ae>"))
+	wantAuthor := "Scott-Nx <158021536+Scott-Nx@users.noreply.github.com>"
+	if gotAuthor != wantAuthor {
+		t.Fatalf("author = %q want %q", gotAuthor, wantAuthor)
+	}
+
+	gotCommitter := strings.TrimSpace(runGitOutput(t, workDir, "log", "-1", "--format=%cn <%ce>"))
+	wantCommitter := "Scott-Nx <158021536+Scott-Nx@users.noreply.github.com>"
+	if gotCommitter != wantCommitter {
+		t.Fatalf("committer = %q want %q", gotCommitter, wantCommitter)
+	}
+}
+
 func writeFile(t *testing.T, path string, contents string) {
 	t.Helper()
 	if err := os.WriteFile(path, []byte(contents), 0644); err != nil {

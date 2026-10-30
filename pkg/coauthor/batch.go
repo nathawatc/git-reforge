@@ -86,7 +86,11 @@ func parseCoauthorTargets(cfg *config.Config) []coauthorTarget {
 	var targets []coauthorTarget
 	from := cfg.CoauthorFrom
 	if len(from) == 0 {
-		from = cfg.OldNames
+		if len(cfg.OldRawAuthors) > 0 {
+			from = cfg.OldRawAuthors
+		} else {
+			from = cfg.OldNames
+		}
 	}
 	for _, raw := range from {
 		raw = strings.TrimSpace(raw)
@@ -103,12 +107,13 @@ func parseCoauthorTargets(cfg *config.Config) []coauthorTarget {
 }
 
 func sedPatternForTarget(t coauthorTarget) string {
-	escapedName := shell.EscapeSed(t.Name)
-	if t.Email != "" {
-		escapedEmail := shell.EscapeSed(t.Email)
-		return "Co-authored-by: " + escapedName + " <" + escapedEmail + ">"
+	if t.Name != "" && t.Email != "" {
+		return "Co-authored-by: " + shell.EscapeSed(t.Name) + " <" + shell.EscapeSed(t.Email) + ">"
 	}
-	return "Co-authored-by: " + escapedName + " <[^>]*>"
+	if t.Email != "" {
+		return "Co-authored-by: [^<]*<" + shell.EscapeSed(t.Email) + ">"
+	}
+	return "Co-authored-by: " + shell.EscapeSed(t.Name) + " <[^>]*>"
 }
 
 func buildSedCommands(targets []coauthorTarget, mode string, newTrailer string) string {
@@ -199,8 +204,10 @@ mode = cfg.get('mode', '')
 
 patterns = []
 for t in targets:
-    if t.get('email'):
+    if t.get('name') and t.get('email'):
         patterns.append(r"(?m)^Co-authored-by: " + re.escape(t['name']) + r" <" + re.escape(t['email']) + r">$\n?")
+    elif t.get('email'):
+        patterns.append(r"(?m)^Co-authored-by: [^<]*<" + re.escape(t['email']) + r">$\n?")
     else:
         patterns.append(r"(?m)^Co-authored-by: " + re.escape(t['name']) + r" <[^>]*>$\n?")
 
@@ -253,8 +260,10 @@ new_email = cfg.get('new_email', '')
 
 patterns = []
 for t in targets:
-    if t.get('email'):
+    if t.get('name') and t.get('email'):
         patterns.append(r"(?m)^Co-authored-by: " + re.escape(t['name']) + r" <" + re.escape(t['email']) + r">$\n?")
+    elif t.get('email'):
+        patterns.append(r"(?m)^Co-authored-by: [^<]*<" + re.escape(t['email']) + r">$\n?")
     else:
         patterns.append(r"(?m)^Co-authored-by: " + re.escape(t['name']) + r" <[^>]*>$\n?")
 
@@ -389,13 +398,13 @@ func InteractiveCoauthorEdit(cfg *config.Config) {
 }
 
 func matchesCoauthor(body string, name string, email string) bool {
-	pattern := "Co-authored-by: " + name
-	if email != "" {
-		pattern += " <" + email + ">"
-	} else {
-		pattern += " "
+	if name != "" && email != "" {
+		return strings.Contains(body, "Co-authored-by: "+name+" <"+email+">")
 	}
-	return strings.Contains(body, pattern)
+	if email != "" {
+		return strings.Contains(body, "<"+email+">") && strings.Contains(body, "Co-authored-by:")
+	}
+	return strings.Contains(body, "Co-authored-by: "+name)
 }
 
 func matchesAnyCoauthor(body string, targets []coauthorTarget) bool {
@@ -410,14 +419,22 @@ func matchesAnyCoauthor(body string, targets []coauthorTarget) bool {
 func extractMatchingLinesForTargets(body string, targets []coauthorTarget) []string {
 	var matches []string
 	for line := range strings.SplitSeq(body, "\n") {
+		if !strings.HasPrefix(line, "Co-authored-by:") {
+			continue
+		}
 		for _, t := range targets {
-			if t.Email != "" {
+			if t.Name != "" && t.Email != "" {
 				if strings.Contains(line, "Co-authored-by: "+t.Name+" <"+t.Email+">") {
 					matches = append(matches, line)
 					break
 				}
+			} else if t.Email != "" {
+				if strings.Contains(line, "<"+t.Email+">") {
+					matches = append(matches, line)
+					break
+				}
 			} else {
-				if strings.HasPrefix(line, "Co-authored-by: "+t.Name+" ") {
+				if strings.HasPrefix(line, "Co-authored-by: "+t.Name+" ") || line == "Co-authored-by: "+t.Name {
 					matches = append(matches, line)
 					break
 				}
