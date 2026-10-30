@@ -2,8 +2,10 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
+	"strings"
 
 	"github.com/urfave/cli/v3"
 
@@ -99,19 +101,22 @@ func main() {
 			cfg.SourceURL = c.Args().Get(0)
 			if dest := c.Args().Get(1); dest != "" {
 				if config.IsLocalPath(dest) {
-					if cfg.SaveDir == "" {
-						cfg.SaveDir = dest
+					if cfg.SaveDir != "" {
+						return fmt.Errorf("cannot specify both --save-dir and local destination path")
 					}
+					cfg.SaveDir = dest
 					cfg.NoPush = true
 				} else {
 					cfg.DestURL = dest
 				}
 			}
+			if c.Args().Len() > 2 {
+				return fmt.Errorf("unexpected extra arguments: %s", strings.Join(c.Args().Slice()[2:], " "))
+			}
 
 			if to := c.String("to"); to != "" {
 				name, email, err := config.ParseAuthor(to)
 				if err != nil {
-					log.Error(err.Error())
 					return err
 				}
 				cfg.NewName = name
@@ -137,7 +142,6 @@ func main() {
 			if coauthorTo := c.String("coauthor-to"); coauthorTo != "" {
 				name, email, err := config.ParseAuthor(coauthorTo)
 				if err != nil {
-					log.Error(err.Error())
 					return err
 				}
 				cfg.CoauthorNewName = name
@@ -153,21 +157,23 @@ func main() {
 			cfg.StripBodyPatterns = c.StringSlice("strip-body")
 
 			if err := config.Validate(cfg); err != nil {
-				log.Error(err.Error())
 				return err
 			}
 
 			log.Info("Checking dependencies...")
 			if err := config.CheckDependencies(cfg); err != nil {
-				log.Error(err.Error())
 				return err
 			}
 			log.Success("All dependencies satisfied")
 
-			ui.DisplayConfig(cfg)
+			if err := ui.DisplayConfig(cfg); err != nil {
+				if errors.Is(err, ui.ErrCancelled) {
+					return nil
+				}
+				return err
+			}
 
 			if err := migration.Run(cfg); err != nil {
-				log.Error(err.Error())
 				return err
 			}
 
@@ -176,7 +182,7 @@ func main() {
 	}
 
 	if err := cmd.Run(context.Background(), os.Args); err != nil {
-		_, _ = fmt.Fprintln(os.Stderr, err)
+		log.Error(err.Error())
 		os.Exit(1)
 	}
 }
