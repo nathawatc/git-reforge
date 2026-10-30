@@ -154,6 +154,9 @@ func Validate(cfg *Config) error {
 	}
 
 	if cfg.CoauthorMode != "" {
+		if cfg.CoauthorMode == "interactive" && !cfg.Interactive {
+			cfg.Interactive = true
+		}
 		if len(cfg.CoauthorFrom) == 0 {
 			switch {
 			case len(cfg.OldRawAuthors) > 0:
@@ -209,8 +212,12 @@ func CheckDependencies(cfg *Config) error {
 		if _, err := exec.LookPath("ssh-keygen"); err != nil {
 			return fmt.Errorf("ssh-keygen is not installed (required for SSH signing)")
 		}
-		if _, err := os.Stat(cfg.SSHKey); err != nil {
+		fi, err := os.Stat(cfg.SSHKey)
+		if err != nil {
 			return fmt.Errorf("SSH key file error: %w", err)
+		}
+		if fi.IsDir() {
+			return fmt.Errorf("SSH key path is a directory: %s", cfg.SSHKey)
 		}
 	}
 
