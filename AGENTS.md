@@ -45,7 +45,7 @@ main.go                 # CLI entry point (urfave/cli/v3 flags, preflight checks
 pkg/
 	config/
 		config.go       # Config struct, Logger interface, nopLogger default, InteractiveState
-		validation.go   # ParseOldNames, Validate, CheckDependencies (git, gpg, ssh-keygen)
+		validation.go   # ParseAuthor, ParseOldNames, IsLocalPath, Validate, CheckDependencies
 	git/
 		clone.go        # Clone directly to working, Push, Save, PruneOriginalRefs, CommitDetails
 	coauthor/
@@ -62,7 +62,7 @@ pkg/
 		logger.go       # ANSI terminal logger implementing config.Logger (Blue/Green/Yellow/Red/Cyan)
 	ui/
 		colors.go       # Single Source of Truth for ANSI color constants
-		display.go      # DisplayConfig (preflight summary + confirmation), ShowSummary
+		display.go      # DisplayConfig (preflight summary + confirmation), ShowSummary, PromptSaveOrCleanup
 		input.go        # PromptSession (TTY / stdin reader wrapper with Close)
 		interactive.go  # InteractiveEdit (per-commit interactive review loop)
 ```
@@ -82,8 +82,9 @@ pkg/
      `InteractiveCoauthorEdit`).
    - Signing: `signing.HandleSigning(cfg)` applies commit signing rules, then calls
      `signing.ResignTags(cfg)`.
-   - Backup pruning: `git.PruneOriginalRefs(workDir)` removes any `.git/refs/original/` references.
-   - Local save: `git.Save(tmpDir, saveDir)` copies rewritten repo to target directory if requested.
+   - Backup pruning: `git.PruneOriginalRefs(cfg.WorkDir())` removes any `.git/refs/original/` references.
+   - Local save: `git.Save(cfg.WorkDir(), cfg.SaveDir)` copies rewritten repo to target directory
+     if requested.
    - Remote push: `git.Push(cfg)` pushes all local branches and tags to destination unless
      `--no-push` is set.
    - Summary: `ui.ShowSummary(cfg)` prints operation report.
@@ -131,13 +132,14 @@ No external git library (such as `go-git`) is used; commit hashes are native Go 
 - **Tag push**: Uses explicit refspec `git push --force origin "refs/tags/*:refs/tags/*"`.
   - Skipped if the repository contains no tags.
   - Never uses `--tags`, which silently skips annotated tags whose SHA changed after re-signing.
-- **Push recovery**: If pushing fails and no terminal is attached, returns an error; if a TTY is available,
-  offers an interactive prompt to save the rewritten repository locally before exiting.
+- **Push recovery**: Handled in `migration.Run` via `ui.PromptSaveOrCleanup`: if pushing fails and
+  no terminal is attached, returns an error; if a TTY is available, offers an interactive prompt to
+  save the rewritten repository locally before exiting.
 
 ### Annotated Tag Recreation (`pkg/signing/commit.go`)
 
-- Re-signing tags (`stripTag`, `resignTagGPG`, `resignTagSSH`) must preserve the original release date
-  and author.
+- Re-signing tags (`stripTag`, `resignTagGPG`, `resignTagSSH` via `recreateTag`) must preserve the original
+  release date and author.
 - Reads tag metadata via `git for-each-ref --format="%(taggername)%00%(taggeremail:trim)%00%(taggerdate:raw)"`.
 - Passes `GIT_COMMITTER_NAME`, `GIT_COMMITTER_EMAIL`, and `GIT_COMMITTER_DATE` when executing `git tag`.
 - If the original tagger matches an old author name being migrated, applies `cfg.NewName` / `cfg.NewEmail`.

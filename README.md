@@ -240,6 +240,6 @@ With `--coauthor-mode interactive`, you can review each affected commit:
 > - The tool uses a temporary clone — your original repository is never modified.
 > - Rewriting commit history changes commit SHAs, which invalidates original cryptographic signatures.
 > - `--no-push` allows you to inspect the rewritten repository locally before pushing.
-> - Combine `--save-dir` and `--dest` to save a local backup copy and push to destination in one run.
+> - Combine `--save-dir` and `<dest>` to save a local backup copy and push to destination in one run.
 > - `Co-authored-by` matching defaults to `--from`; supply `--coauthor-from` to match custom identities.
-> - `--save-dir` without `--dest` automatically implies `--no-push`.
+> - `--save-dir` without `<dest>` automatically implies `--no-push`.
