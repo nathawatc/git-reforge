@@ -13,6 +13,8 @@ import (
 	"git-reforge/pkg/ui"
 )
 
+var version = "dev"
+
 func main() {
 	log := logging.New()
 	cfg := config.New()
@@ -20,6 +22,7 @@ func main() {
 
 	cmd := &cli.Command{
 		Name:      "git-reforge",
+		Version:   version,
 		Usage:     "Git repository forge migration and history rewriting tool",
 		ArgsUsage: "<source> [dest]",
 		Flags: []cli.Flag{

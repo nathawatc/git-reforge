@@ -20,6 +20,7 @@ builds:
       - -buildvcs=false
     ldflags:
       - -s -w -buildid=
+      - -X main.version={{ .Version }}
     goos:
       - linux
       - darwin
