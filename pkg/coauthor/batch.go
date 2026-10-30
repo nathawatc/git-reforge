@@ -8,10 +8,10 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github-to-codeberg/pkg/config"
-	"github-to-codeberg/pkg/git"
-	"github-to-codeberg/pkg/shell"
-	"github-to-codeberg/pkg/ui"
+	"git-reforge/pkg/config"
+	"git-reforge/pkg/git"
+	"git-reforge/pkg/shell"
+	"git-reforge/pkg/ui"
 )
 
 func RewriteBatch(cfg *config.Config) error {

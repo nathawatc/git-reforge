@@ -1,4 +1,4 @@
-module github-to-codeberg
+module git-reforge
 
 go 1.24
 

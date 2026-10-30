@@ -8,8 +8,8 @@ import (
 	"slices"
 	"strings"
 
-	"github-to-codeberg/pkg/config"
-	"github-to-codeberg/pkg/shell"
+	"git-reforge/pkg/config"
+	"git-reforge/pkg/shell"
 )
 
 func HandleSigning(cfg *config.Config) error {

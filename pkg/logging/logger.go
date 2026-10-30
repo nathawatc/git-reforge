@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github-to-codeberg/pkg/ui"
+	"git-reforge/pkg/ui"
 )
 
 type Logger struct{}

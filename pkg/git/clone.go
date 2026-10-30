@@ -11,8 +11,8 @@ import (
 	"slices"
 	"strings"
 
-	"github-to-codeberg/pkg/config"
-	"github-to-codeberg/pkg/shell"
+	"git-reforge/pkg/config"
+	"git-reforge/pkg/shell"
 )
 
 func Clone(cfg *config.Config) error {
@@ -21,7 +21,7 @@ func Clone(cfg *config.Config) error {
 	log.Header("Cloning Repository")
 	log.Info("Source: " + cfg.SourceURL)
 
-	tmpDir, err := os.MkdirTemp("", "github-codeberg-migration.")
+	tmpDir, err := os.MkdirTemp("", "git-reforge-migration.")
 	if err != nil {
 		return fmt.Errorf("failed to create temp directory: %w", err)
 	}
@@ -314,7 +314,7 @@ func PromptSaveOrCleanup(cfg *config.Config, failedStep string) (retErr error) {
 
 	if _, err := fmt.Fprintf(tty,
 		"\n"+
-			"The %s to Codeberg failed.\n"+
+			"The %s to destination repository failed.\n"+
 			"The rewritten repository is still available in the temporary directory.\n"+
 			"\n"+
 			"  [S]ave    - copy the rewritten repository to a local path\n"+

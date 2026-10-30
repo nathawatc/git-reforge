@@ -35,4 +35,5 @@ go.work.sum
 # ---> Go Releaser
 dist/
 
+git-reforge
 github-to-codeberg

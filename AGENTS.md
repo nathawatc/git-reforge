@@ -4,9 +4,9 @@ Guidance for AI coding agents working in this repository.
 
 ## Project Overview
 
-Go CLI migration tool that clones Git repositories from GitHub, rewrites commit history (authors,
-committers, messages, `Co-authored-by` trailers, signatures), and pushes the rewritten branches
-and tags to Codeberg.
+Go CLI migration tool that clones Git repositories from any forge (GitHub, Codeberg, GitLab,
+Forgejo), rewrites commit history (authors, committers, messages, `Co-authored-by` trailers,
+signatures), and pushes the rewritten branches and tags to the destination forge.
 
 Replaces the legacy shell implementation (`src/main.sh`).
 
@@ -17,7 +17,7 @@ Replaces the legacy shell implementation (`src/main.sh`).
 go build .
 
 # Format code and optimize imports
-goimports -w -local github-to-codeberg .
+goimports -w -local git-reforge .
 
 # Tidy module dependencies (keeps only github.com/urfave/cli/v3)
 go mod tidy

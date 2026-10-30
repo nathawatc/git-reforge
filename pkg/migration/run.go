@@ -3,12 +3,12 @@ package migration
 import (
 	"os"
 
-	"github-to-codeberg/pkg/coauthor"
-	"github-to-codeberg/pkg/config"
-	"github-to-codeberg/pkg/git"
-	"github-to-codeberg/pkg/rewrite"
-	"github-to-codeberg/pkg/signing"
-	"github-to-codeberg/pkg/ui"
+	"git-reforge/pkg/coauthor"
+	"git-reforge/pkg/config"
+	"git-reforge/pkg/git"
+	"git-reforge/pkg/rewrite"
+	"git-reforge/pkg/signing"
+	"git-reforge/pkg/ui"
 )
 
 func Run(cfg *config.Config) (retErr error) {
@@ -56,7 +56,7 @@ func Run(cfg *config.Config) (retErr error) {
 			return err
 		}
 	} else {
-		cfg.Logger.Info("Skipping push to Codeberg")
+		cfg.Logger.Info("Skipping push to destination repository")
 	}
 
 	ui.ShowSummary(cfg)

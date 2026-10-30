@@ -6,8 +6,8 @@ import (
 	"regexp"
 	"strings"
 
-	"github-to-codeberg/pkg/config"
-	"github-to-codeberg/pkg/git"
+	"git-reforge/pkg/config"
+	"git-reforge/pkg/git"
 )
 
 func InteractiveEdit(cfg *config.Config) {

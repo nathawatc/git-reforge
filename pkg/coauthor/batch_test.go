@@ -6,8 +6,8 @@ import (
 	"strings"
 	"testing"
 
-	"github-to-codeberg/pkg/config"
-	"github-to-codeberg/pkg/shell"
+	"git-reforge/pkg/config"
+	"git-reforge/pkg/shell"
 )
 
 func TestEscapeSed(t *testing.T) {

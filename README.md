@@ -1,6 +1,7 @@
-# GitHub to Codeberg
+# Git Reforge
 
-Migrate Git repositories from GitHub to Codeberg with automated history rewriting.
+Reforge Git repository history (authors, committers, messages, co-authors, signatures) and
+migrate seamlessly across Git forges (GitHub, Codeberg, Forgejo, GitLab).
 
 ## Features
 
@@ -32,30 +33,29 @@ Migrate Git repositories from GitHub to Codeberg with automated history rewritin
 - `git-filter-repo` (optional but strongly recommended for high-speed rewrites)
 - GPG (optional, for GPG signing)
 - SSH (optional, for SSH signing)
-- A GitHub account with repositories to migrate
-- A Codeberg account
+- Access to source and destination Git repositories
 
 ## Installation
 
 ```bash
-git clone https://codeberg.org/nathawat/gitHub-to-codeberg.git
-cd gitHub-to-codeberg
+git clone https://codeberg.org/nathawat/git-reforge.git
+cd git-reforge
 go build .
 ```
 
 ## Usage
 
 ```bash
-./github-to-codeberg [OPTIONS]
+./git-reforge [OPTIONS]
 ```
 
 ### Required Options
 
-| Option                    | Description                                                                      |
-| ------------------------- | -------------------------------------------------------------------------------- |
-| `-s, --source <url>`      | GitHub repository URL                                                            |
-| `-d, --dest <url>`        | Codeberg repository URL (not required when `--no-push` or `--save-dir` is given) |
-| `-e, --new-email <email>` | New author email                                                                 |
+| Option                    | Description                                                                         |
+| ------------------------- | ----------------------------------------------------------------------------------- |
+| `-s, --source <url>`      | Source repository URL                                                               |
+| `-d, --dest <url>`        | Destination repository URL (not required when `--no-push` or `--save-dir` is given) |
+| `-e, --new-email <email>` | New author email                                                                    |
 
 ### Optional Options
 
@@ -69,7 +69,7 @@ go build .
 | `--ssh-key <path>`      | SSH key path for re-signing (required if `--sign-mode=ssh`)    |
 | `--nosign`              | Shorthand for `--sign-mode=none`                               |
 | `--save-dir <path>`     | Save rewritten repo to `<path>` (directory must not exist)     |
-| `--no-push`             | Rewrite history locally but skip pushing to Codeberg           |
+| `--no-push`             | Rewrite history locally but skip pushing to destination        |
 | `-y, --yes`             | Skip confirmation prompt for non-interactive / CI runs         |
 | `-h, --help`            | Show help message                                              |
 
@@ -91,7 +91,7 @@ go build .
 **Basic migration:**
 
 ```bash
-./github-to-codeberg -s https://github.com/user/repo.git \
+./git-reforge -s https://github.com/user/repo.git \
   -d https://codeberg.org/user/repo.git \
   -o "OldName" \
   -e myuser@noreply.codeberg.org
@@ -100,7 +100,7 @@ go build .
 **Non-interactive / CI run:**
 
 ```bash
-./github-to-codeberg -s https://github.com/user/repo.git \
+./git-reforge -s https://github.com/user/repo.git \
   -d https://codeberg.org/user/repo.git \
   -o "OldName" -n "NewName" \
   -e myuser@noreply.codeberg.org \
@@ -110,7 +110,7 @@ go build .
 **Interactive mode with custom author:**
 
 ```bash
-./github-to-codeberg -s https://github.com/user/repo.git \
+./git-reforge -s https://github.com/user/repo.git \
   -d https://codeberg.org/user/repo.git \
   -o "OldName" -n "NewName" \
   -e newuser@noreply.codeberg.org \
@@ -120,7 +120,7 @@ go build .
 **With GPG re-signing:**
 
 ```bash
-./github-to-codeberg -s https://github.com/user/repo.git \
+./git-reforge -s https://github.com/user/repo.git \
   -d https://codeberg.org/user/repo.git \
   -o "OldName" \
   -e myuser@noreply.codeberg.org \
@@ -130,7 +130,7 @@ go build .
 **With SSH re-signing:**
 
 ```bash
-./github-to-codeberg -s https://github.com/user/repo.git \
+./git-reforge -s https://github.com/user/repo.git \
   -d https://codeberg.org/user/repo.git \
   -o "OldName" \
   -e myuser@noreply.codeberg.org \
@@ -140,7 +140,7 @@ go build .
 **Multiple old author names:**
 
 ```bash
-./github-to-codeberg -s https://github.com/user/repo.git \
+./git-reforge -s https://github.com/user/repo.git \
   -d https://codeberg.org/user/repo.git \
   -o "OldName1" -o "OldName2" \
   -n "NewName" \
@@ -150,7 +150,7 @@ go build .
 **Rewrite locally and save without pushing:**
 
 ```bash
-./github-to-codeberg -s https://github.com/user/repo.git \
+./git-reforge -s https://github.com/user/repo.git \
   -o "OldName" -n "NewName" \
   -e newuser@noreply.codeberg.org \
   --no-push --save-dir /path/to/output
@@ -159,7 +159,7 @@ go build .
 **Save a local copy and push:**
 
 ```bash
-./github-to-codeberg -s https://github.com/user/repo.git \
+./git-reforge -s https://github.com/user/repo.git \
   -d https://codeberg.org/user/repo.git \
   -o "OldName" -n "NewName" \
   -e newuser@noreply.codeberg.org \
@@ -169,7 +169,7 @@ go build .
 **Remove all matching Co-authored-by trailers:**
 
 ```bash
-./github-to-codeberg -s https://github.com/user/repo.git \
+./git-reforge -s https://github.com/user/repo.git \
   -d https://codeberg.org/user/repo.git \
   -o "OldName" \
   -e myuser@noreply.codeberg.org \
@@ -179,7 +179,7 @@ go build .
 **Rewrite Co-authored-by trailers:**
 
 ```bash
-./github-to-codeberg -s https://github.com/user/repo.git \
+./git-reforge -s https://github.com/user/repo.git \
   -d https://codeberg.org/user/repo.git \
   -o "OldName" \
   -e myuser@noreply.codeberg.org \
@@ -193,7 +193,7 @@ go build .
 **Interactive Co-authored-by review:**
 
 ```bash
-./github-to-codeberg -s https://github.com/user/repo.git \
+./git-reforge -s https://github.com/user/repo.git \
   -d https://codeberg.org/user/repo.git \
   -o "OldName" \
   -e myuser@noreply.codeberg.org \
@@ -233,6 +233,6 @@ With `--coauthor-mode interactive`, you can review each affected commit:
 > - The tool uses a temporary clone — your original repository is never modified.
 > - Rewriting commit history changes commit SHAs, which invalidates original cryptographic signatures.
 > - `--no-push` allows you to inspect the rewritten repository locally before pushing.
-> - Combine `--save-dir` and `--dest` to save a local backup copy and push to Codeberg in one run.
+> - Combine `--save-dir` and `--dest` to save a local backup copy and push to destination in one run.
 > - `Co-authored-by` matching is case-sensitive; supply `--coauthor-old-email` to narrow matches.
 > - `--save-dir` without `--dest` automatically implies `--no-push`.

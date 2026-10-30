@@ -7,8 +7,8 @@ import (
 	"strings"
 	"testing"
 
-	"github-to-codeberg/pkg/config"
-	"github-to-codeberg/pkg/migration"
+	"git-reforge/pkg/config"
+	"git-reforge/pkg/migration"
 )
 
 type pipelineTestLogger struct{}

@@ -5,7 +5,7 @@ import (
 	"os"
 	"strings"
 
-	"github-to-codeberg/pkg/config"
+	"git-reforge/pkg/config"
 )
 
 func DisplayConfig(cfg *config.Config) {
@@ -99,7 +99,7 @@ func ShowSummary(cfg *config.Config) {
 	log := cfg.Logger
 	log.Header("Migration Complete!")
 
-	fmt.Printf("  %s✓%s Repository migrated from GitHub to Codeberg\n", Green, NC)
+	fmt.Printf("  %s✓%s Repository history rewritten successfully\n", Green, NC)
 	if cfg.NewName != "" {
 		if len(cfg.OldNames) == 1 {
 			fmt.Printf("  %s✓%s Author '%s' changed to '%s'\n", Green, NC, cfg.OldNames[0], cfg.NewName)
@@ -149,9 +149,9 @@ func ShowSummary(cfg *config.Config) {
 
 	fmt.Println()
 	if cfg.NoPush {
-		fmt.Printf("  %s!%s Push to Codeberg was skipped\n", Yellow, NC)
+		fmt.Printf("  %s!%s Push to destination repository was skipped\n", Yellow, NC)
 	} else {
-		fmt.Printf("  %sCodeberg Repository:%s %s\n", Bold, NC, cfg.DestURL)
+		fmt.Printf("  %sDestination Repository:%s %s\n", Bold, NC, cfg.DestURL)
 	}
 
 	if cfg.SaveDir != "" {

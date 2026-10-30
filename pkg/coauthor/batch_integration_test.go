@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github-to-codeberg/pkg/config"
+	"git-reforge/pkg/config"
 )
 
 type testLogger struct{}

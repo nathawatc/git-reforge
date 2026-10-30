@@ -7,10 +7,10 @@ import (
 
 	"github.com/urfave/cli/v3"
 
-	"github-to-codeberg/pkg/config"
-	"github-to-codeberg/pkg/logging"
-	"github-to-codeberg/pkg/migration"
-	"github-to-codeberg/pkg/ui"
+	"git-reforge/pkg/config"
+	"git-reforge/pkg/logging"
+	"git-reforge/pkg/migration"
+	"git-reforge/pkg/ui"
 )
 
 func main() {
@@ -19,18 +19,18 @@ func main() {
 	cfg.Logger = log
 
 	cmd := &cli.Command{
-		Name:  "migrate",
-		Usage: "GitHub to Codeberg migration script",
+		Name:  "git-reforge",
+		Usage: "Git repository forge migration and history rewriting tool",
 		Flags: []cli.Flag{
 			&cli.StringFlag{
 				Name:    "source",
 				Aliases: []string{"s"},
-				Usage:   "GitHub repository URL",
+				Usage:   "Source repository URL (e.g. GitHub, Codeberg, GitLab)",
 			},
 			&cli.StringFlag{
 				Name:    "dest",
 				Aliases: []string{"d"},
-				Usage:   "Codeberg repository URL",
+				Usage:   "Destination repository URL (e.g. Codeberg, GitHub, GitLab)",
 			},
 			&cli.StringFlag{
 				Name:    "new-name",

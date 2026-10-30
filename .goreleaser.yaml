@@ -1,13 +1,13 @@
 version: 2
 
-project_name: github-to-codeberg
+project_name: git-reforge
 
 before:
   hooks:
     - go mod tidy
 
 builds:
-  - id: github-to-codeberg
+  - id: git-reforge
     main: .
     binary: >-
       {{ .ProjectName }}-{{ .Os }}-{{ .Arch }}
