@@ -47,7 +47,7 @@ func TestMatchesAnyCoauthor(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := matchesAnyCoauthor(tt.body, []coauthorTarget{{Name: tt.coauthorName, Email: tt.coauthorEmail}})
+			got := matchesAnyCoauthor(tt.body, []CoauthorTarget{{Name: tt.coauthorName, Email: tt.coauthorEmail}})
 			if got != tt.want {
 				t.Errorf("matchesAnyCoauthor() = %v want %v", got, tt.want)
 			}
@@ -58,7 +58,7 @@ func TestMatchesAnyCoauthor(t *testing.T) {
 func TestExtractMatchingLinesForTargets(t *testing.T) {
 	body := "Fix bug\n\nCo-authored-by: Alice <alice@example.org>\nCo-authored-by: Bob <bob@example.org>\n"
 
-	got := extractMatchingLinesForTargets(body, []coauthorTarget{{Name: "Alice", Email: "alice@example.org"}})
+	got := extractMatchingLinesForTargets(body, []CoauthorTarget{{Name: "Alice", Email: "alice@example.org"}})
 	if len(got) != 1 {
 		t.Errorf("got %d lines want 1", len(got))
 	}
@@ -66,7 +66,7 @@ func TestExtractMatchingLinesForTargets(t *testing.T) {
 		t.Errorf("got %q want Alice", got)
 	}
 
-	got2 := extractMatchingLinesForTargets(body, []coauthorTarget{{Name: "Bob"}})
+	got2 := extractMatchingLinesForTargets(body, []CoauthorTarget{{Name: "Bob"}})
 	if len(got2) != 1 {
 		t.Errorf("got %d lines want 1", len(got2))
 	}

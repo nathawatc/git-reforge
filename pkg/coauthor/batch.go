@@ -35,13 +35,13 @@ func RewriteInteractive(cfg *config.Config) error {
 	return rewriteInteractiveFilterRepo(cfg)
 }
 
-type coauthorTarget struct {
+type CoauthorTarget struct {
 	Name  string `json:"name"`
 	Email string `json:"email"`
 }
 
-func parseCoauthorTargets(cfg *config.Config) []coauthorTarget {
-	var targets []coauthorTarget
+func ParseCoauthorTargets(cfg *config.Config) []CoauthorTarget {
+	var targets []CoauthorTarget
 	from := cfg.CoauthorFrom
 	if len(from) == 0 {
 		switch {
@@ -59,9 +59,9 @@ func parseCoauthorTargets(cfg *config.Config) []coauthorTarget {
 			continue
 		}
 		if name, email, err := config.ParseAuthor(raw); err == nil && email != "" {
-			targets = append(targets, coauthorTarget{Name: name, Email: email})
+			targets = append(targets, CoauthorTarget{Name: name, Email: email})
 		} else {
-			targets = append(targets, coauthorTarget{Name: raw, Email: ""})
+			targets = append(targets, CoauthorTarget{Name: raw, Email: ""})
 		}
 	}
 	return targets
@@ -69,7 +69,7 @@ func parseCoauthorTargets(cfg *config.Config) []coauthorTarget {
 
 func rewriteBatchFilterRepo(cfg *config.Config) error {
 	log := cfg.Logger
-	targets := parseCoauthorTargets(cfg)
+	targets := ParseCoauthorTargets(cfg)
 	if len(targets) == 0 {
 		return nil
 	}
@@ -78,13 +78,13 @@ func rewriteBatchFilterRepo(cfg *config.Config) error {
 	switch cfg.CoauthorMode {
 	case "remove":
 		for _, t := range targets {
-			pattern := coauthorRegexPattern(t)
+			pattern := CoauthorRegexPattern(t)
 			lines = append(lines, "regex:(?m)"+pattern+"(\\r?\\n)?==>")
 		}
 	case "rewrite":
 		replacement := "Co-authored-by: " + cfg.CoauthorNewName + " <" + cfg.CoauthorNewEmail + ">"
 		for _, t := range targets {
-			pattern := coauthorRegexPattern(t)
+			pattern := CoauthorRegexPattern(t)
 			lines = append(lines, "regex:(?m)"+pattern+"==>"+replacement)
 		}
 	}
@@ -108,7 +108,7 @@ func rewriteBatchFilterRepo(cfg *config.Config) error {
 	return nil
 }
 
-func coauthorRegexPattern(t coauthorTarget) string {
+func CoauthorRegexPattern(t CoauthorTarget) string {
 	switch {
 	case t.Name != "" && t.Email != "":
 		return `^Co-authored-by:\s*` + regexp.QuoteMeta(t.Name) + `\s*<` + regexp.QuoteMeta(t.Email) + `>`
@@ -121,7 +121,7 @@ func coauthorRegexPattern(t coauthorTarget) string {
 
 func rewriteInteractiveFilterRepo(cfg *config.Config) error {
 	log := cfg.Logger
-	targets := parseCoauthorTargets(cfg)
+	targets := ParseCoauthorTargets(cfg)
 	dataFile := filepath.Join(cfg.TempDir, "filter_coauthor_interactive.json")
 	data := map[string]any{
 		"actions":   cfg.State.CoauthorActions,
@@ -199,7 +199,7 @@ func InteractiveCoauthorEdit(cfg *config.Config) {
 	log := cfg.Logger
 	log.Header("Interactive Co-authored-by Editing")
 
-	targets := parseCoauthorTargets(cfg)
+	targets := ParseCoauthorTargets(cfg)
 	if len(targets) == 0 {
 		log.Warning("No Co-authored-by targets configured")
 		return
@@ -290,11 +290,11 @@ func InteractiveCoauthorEdit(cfg *config.Config) {
 	}
 }
 
-func matchesAnyCoauthor(body string, targets []coauthorTarget) bool {
+func matchesAnyCoauthor(body string, targets []CoauthorTarget) bool {
 	return len(extractMatchingLinesForTargets(body, targets)) > 0
 }
 
-func extractMatchingLinesForTargets(body string, targets []coauthorTarget) []string {
+func extractMatchingLinesForTargets(body string, targets []CoauthorTarget) []string {
 	var matches []string
 	for line := range strings.SplitSeq(body, "\n") {
 		if !strings.HasPrefix(line, "Co-authored-by:") {
