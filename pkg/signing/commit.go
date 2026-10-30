@@ -180,6 +180,9 @@ fi`, signCmd)
 }
 
 func ResignTags(cfg *config.Config) error {
+	if cfg.SignMode == "keep" || cfg.SignMode == "" {
+		return nil
+	}
 	log := cfg.Logger
 
 	// Get all annotated tags
@@ -320,9 +323,9 @@ type taggerInfo struct {
 func getTagTagger(workDir string, tagName string) (taggerInfo, error) {
 	cmd := exec.Command("git", "for-each-ref", "--format=%(taggername)%00%(taggeremail:trim)%00%(taggerdate:raw)", "refs/tags/"+tagName)
 	cmd.Dir = workDir
-	output, err := cmd.Output()
+	output, err := cmd.CombinedOutput()
 	if err != nil {
-		return taggerInfo{}, fmt.Errorf("git tagger info failed: %w", err)
+		return taggerInfo{}, fmt.Errorf("git tagger info failed for tag %s: %s: %w", tagName, strings.TrimSpace(string(output)), err)
 	}
 	parts := strings.Split(strings.TrimRight(string(output), "\n"), "\x00")
 	if len(parts) < 3 {
