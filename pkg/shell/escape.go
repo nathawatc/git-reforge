@@ -17,44 +17,6 @@ func RunCommand(cmd *exec.Cmd, description string) error {
 	return nil
 }
 
-func HasFilterRepo() bool {
-	_, err := exec.LookPath("git-filter-repo")
-	return err == nil
-}
-
-var (
-	sedReplacer = strings.NewReplacer(
-		"\\", "\\\\",
-		"/", "\\/",
-		"[", "\\[",
-		"]", "\\]",
-		".", "\\.",
-		"^", "\\^",
-		"$", "\\$",
-		"*", "\\*",
-		"+", "\\+",
-		"?", "\\?",
-		"(", "\\(",
-		")", "\\)",
-		"{", "\\{",
-		"}", "\\}",
-		"|", "\\|",
-	)
-	sedReplacementReplacer = strings.NewReplacer(
-		"\\", "\\\\",
-		"&", "\\&",
-		"/", "\\/",
-	)
-)
-
-func EscapeSed(s string) string {
-	return sedReplacer.Replace(s)
-}
-
-func EscapeSedReplacement(s string) string {
-	return sedReplacementReplacer.Replace(s)
-}
-
 func QuoteSingle(s string) string {
 	return "'" + strings.ReplaceAll(s, "'", "'\\''") + "'"
 }
