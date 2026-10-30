@@ -118,12 +118,6 @@ func buildUnifiedFilterScript(cfg *config.Config) (string, error) {
 	script.WriteString("#!/usr/bin/env sh\n")
 
 	var matchCases []string
-	for _, raw := range cfg.OldRawAuthors {
-		_, email, _ := config.ParseAuthor(raw)
-		if email != "" {
-			matchCases = append(matchCases, shell.QuoteSingle(email))
-		}
-	}
 	for _, e := range cfg.OldEmails {
 		if e != "" {
 			matchCases = append(matchCases, shell.QuoteSingle(e))
@@ -131,12 +125,6 @@ func buildUnifiedFilterScript(cfg *config.Config) (string, error) {
 	}
 
 	var nameCases []string
-	for _, raw := range cfg.OldRawAuthors {
-		name, _, _ := config.ParseAuthor(raw)
-		if name != "" {
-			nameCases = append(nameCases, shell.QuoteSingle(name))
-		}
-	}
 	for _, n := range cfg.OldNames {
 		if n != "" {
 			nameCases = append(nameCases, shell.QuoteSingle(n))
@@ -183,16 +171,19 @@ fi
 	}
 
 	if pyFilterPath != "" {
-		fmt.Fprintf(&script, "    msg=$(python3 %s)\n", shell.QuoteSingle(pyFilterPath))
+		switch cfg.SignMode {
+		case "ssh", "gpg":
+			fmt.Fprintf(&script, "    python3 %s | git commit-tree -S \"$@\"\n", shell.QuoteSingle(pyFilterPath))
+		default:
+			fmt.Fprintf(&script, "    python3 %s | git commit-tree \"$@\"\n", shell.QuoteSingle(pyFilterPath))
+		}
 	} else {
-		script.WriteString("    msg=$(cat)\n")
-	}
-
-	switch cfg.SignMode {
-	case "ssh", "gpg":
-		script.WriteString("    echo \"$msg\" | git commit-tree -S \"$@\"\n")
-	default:
-		script.WriteString("    echo \"$msg\" | git commit-tree \"$@\"\n")
+		switch cfg.SignMode {
+		case "ssh", "gpg":
+			script.WriteString("    git commit-tree -S \"$@\"\n")
+		default:
+			script.WriteString("    git commit-tree \"$@\"\n")
+		}
 	}
 
 	script.WriteString("else\n")
@@ -246,7 +237,10 @@ for p in (cfg.get('strip_title') or []):
 title = title.rstrip()
 
 for p in (cfg.get('strip_body') or []):
-    body = re.sub(p, "", body, flags=re.MULTILINE)
+    pat = p
+    if pat.endswith('$'):
+        pat += r'(?:\r?\n)?'
+    body = re.sub(pat, "", body, flags=re.MULTILINE)
 
 mode = cfg.get('coauthor_mode', '')
 targets = cfg.get('coauthor_targets', [])
@@ -369,7 +363,7 @@ for p in (cfg.get('strip_body') or []):
         pat += rb'(?:\r?\n)?'
     strip_body.append(re.compile(pat, re.MULTILINE))
 
-if strip_title or strip_body:
+if (cid in overrides) and (strip_title or strip_body):
     parts = commit.message.split(b'\n', 1)
     title = parts[0]
     body = parts[1] if len(parts) > 1 else b''
