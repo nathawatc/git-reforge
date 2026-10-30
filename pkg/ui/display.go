@@ -65,6 +65,13 @@ func DisplayConfig(cfg *config.Config) {
 			fmt.Printf("  %sCo-author New:%s   %s <%s>\n", Bold, NC, cfg.CoauthorNewName, cfg.CoauthorNewEmail)
 		}
 	}
+
+	if len(cfg.StripTitlePatterns) > 0 {
+		fmt.Printf("  %sStrip Title:%s     %s\n", Bold, NC, strings.Join(cfg.StripTitlePatterns, ", "))
+	}
+	if len(cfg.StripBodyPatterns) > 0 {
+		fmt.Printf("  %sStrip Body:%s      %s\n", Bold, NC, strings.Join(cfg.StripBodyPatterns, ", "))
+	}
 	fmt.Println()
 
 	if cfg.NoPush && cfg.SaveDir == "" {
@@ -135,6 +142,15 @@ func ShowSummary(cfg *config.Config) {
 			fmt.Printf("  %s✓%s Co-authored-by trailers: %d rewritten, %d removed\n",
 				Green, NC, rewriteCount, removeCount)
 		}
+	}
+
+	if len(cfg.StripTitlePatterns) > 0 {
+		fmt.Printf("  %s✓%s Stripped %d title pattern(s) from commit history\n",
+			Green, NC, len(cfg.StripTitlePatterns))
+	}
+	if len(cfg.StripBodyPatterns) > 0 {
+		fmt.Printf("  %s✓%s Stripped %d body pattern(s) from commit history\n",
+			Green, NC, len(cfg.StripBodyPatterns))
 	}
 
 	switch cfg.SignMode {

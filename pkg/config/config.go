@@ -14,6 +14,10 @@ type Config struct {
 	SaveDir     string
 	NoPush      bool
 
+	// Message stripping patterns
+	StripTitlePatterns []string
+	StripBodyPatterns  []string
+
 	// Co-authored-by configuration
 	CoauthorMode     string
 	CoauthorFrom     []string

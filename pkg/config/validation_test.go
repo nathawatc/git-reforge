@@ -269,3 +269,46 @@ func TestParseAuthor(t *testing.T) {
 		}
 	}
 }
+
+func TestValidateStripPatterns(t *testing.T) {
+	t.Run("valid patterns pass", func(t *testing.T) {
+		cfg := validConfig()
+		cfg.StripTitlePatterns = []string{`\s*\(#\d+\)`, `\[skip ci\]`}
+		cfg.StripBodyPatterns = []string{`(?m)^Reviewed-on:.*$`, `^Refs:.*$`}
+		if err := Validate(cfg); err != nil {
+			t.Fatalf("Validate() unexpected error = %v", err)
+		}
+	})
+
+	t.Run("invalid strip-title regex rejected", func(t *testing.T) {
+		cfg := validConfig()
+		cfg.StripTitlePatterns = []string{`(?P<invalid`}
+		if err := Validate(cfg); err == nil {
+			t.Fatal("Validate() error = nil, want error for invalid regex in strip-title")
+		}
+	})
+
+	t.Run("empty strip-title regex rejected", func(t *testing.T) {
+		cfg := validConfig()
+		cfg.StripTitlePatterns = []string{"   "}
+		if err := Validate(cfg); err == nil {
+			t.Fatal("Validate() error = nil, want error for empty regex in strip-title")
+		}
+	})
+
+	t.Run("invalid strip-body regex rejected", func(t *testing.T) {
+		cfg := validConfig()
+		cfg.StripBodyPatterns = []string{`[a-z`}
+		if err := Validate(cfg); err == nil {
+			t.Fatal("Validate() error = nil, want error for invalid regex in strip-body")
+		}
+	})
+
+	t.Run("empty strip-body regex rejected", func(t *testing.T) {
+		cfg := validConfig()
+		cfg.StripBodyPatterns = []string{""}
+		if err := Validate(cfg); err == nil {
+			t.Fatal("Validate() error = nil, want error for empty regex in strip-body")
+		}
+	})
+}

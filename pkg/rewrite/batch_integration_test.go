@@ -352,6 +352,120 @@ func TestRewriteCommitsBatchHandlesSpacesInTempDir(t *testing.T) {
 	}
 }
 
+func TestRewriteCommitsBatchStripTitleAndBody(t *testing.T) {
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skip("git not available")
+	}
+
+	tmpDir := t.TempDir()
+	workDir := filepath.Join(tmpDir, "working")
+	if err := os.Mkdir(workDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+
+	runGit(t, workDir, "init")
+	runGit(t, workDir, "config", "user.name", "Old User")
+	runGit(t, workDir, "config", "user.email", "old@example.org")
+
+	// Commit 1: title with (#12) and [skip ci], body with Reviewed-on
+	writeFile(t, filepath.Join(workDir, "f1.txt"), "1\n")
+	runGit(t, workDir, "add", "f1.txt")
+	msg1 := "feat: add feature (#12) [skip ci]\n\nDetailed explanation.\n\nReviewed-on: https://codeberg.org/foo/bar/pulls/12\n"
+	runGit(t, workDir, "commit", "-m", msg1)
+
+	// Commit 2: single-line title only with (#99)
+	writeFile(t, filepath.Join(workDir, "f2.txt"), "2\n")
+	runGit(t, workDir, "add", "f2.txt")
+	runGit(t, workDir, "commit", "-m", "fix: bug (#99)")
+
+	cfg := config.New()
+	cfg.TempDir = tmpDir
+	cfg.OldNames = []string{"Old User"}
+	cfg.NewName = "New User"
+	cfg.NewEmail = "new@example.org"
+	cfg.StripTitlePatterns = []string{`\s*\(#\d+\)`, `\s*\[skip ci\]`}
+	cfg.StripBodyPatterns = []string{`^Reviewed-on:.*$`}
+	cfg.Logger = testLogger{}
+
+	if err := RewriteCommitsBatch(cfg); err != nil {
+		t.Fatalf("RewriteCommitsBatch() error = %v", err)
+	}
+
+	// Verify commit 1
+	c1Body := runGitOutput(t, workDir, "log", "--format=%B", "-1", "HEAD~1")
+	want1 := "feat: add feature\n\nDetailed explanation.\n"
+	if strings.TrimSpace(c1Body) != strings.TrimSpace(want1) {
+		t.Fatalf("commit 1 rewritten message = %q want %q", c1Body, want1)
+	}
+	if strings.Contains(c1Body, "Reviewed-on:") {
+		t.Fatalf("commit 1 still contains Reviewed-on: %q", c1Body)
+	}
+	if strings.Contains(c1Body, "(#12)") || strings.Contains(c1Body, "[skip ci]") {
+		t.Fatalf("commit 1 still contains title patterns: %q", c1Body)
+	}
+
+	// Verify commit 2
+	c2Body := runGitOutput(t, workDir, "log", "--format=%B", "-1", "HEAD")
+	want2 := "fix: bug\n"
+	if strings.TrimSpace(c2Body) != strings.TrimSpace(want2) {
+		t.Fatalf("commit 2 rewritten message = %q want %q", c2Body, want2)
+	}
+}
+
+func TestRewriteCommitsBatchFilterBranchStripFallback(t *testing.T) {
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skip("git not available")
+	}
+
+	// Create bin dir mirroring /usr/bin without git-filter-repo to test filter-branch fallback
+	binDir := t.TempDir()
+	entries, err := os.ReadDir("/usr/bin")
+	if err != nil {
+		t.Skip("cannot read /usr/bin")
+	}
+	for _, entry := range entries {
+		if entry.Name() == "git-filter-repo" {
+			continue
+		}
+		_ = os.Symlink(filepath.Join("/usr/bin", entry.Name()), filepath.Join(binDir, entry.Name()))
+	}
+	t.Setenv("PATH", binDir)
+
+	tmpDir := t.TempDir()
+	workDir := filepath.Join(tmpDir, "working")
+	if err := os.Mkdir(workDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+
+	runGit(t, workDir, "init")
+	runGit(t, workDir, "config", "user.name", "Old User")
+	runGit(t, workDir, "config", "user.email", "old@example.org")
+	runGit(t, workDir, "config", "commit.gpgsign", "false")
+
+	writeFile(t, filepath.Join(workDir, "f.txt"), "hello\n")
+	runGit(t, workDir, "add", "f.txt")
+	runGit(t, workDir, "commit", "-m", "chore: setup repo (#1)\n\nReviewed-on: https://example.com/1\n")
+
+	cfg := config.New()
+	cfg.TempDir = tmpDir
+	cfg.OldNames = []string{"Old User"}
+	cfg.NewName = "New User"
+	cfg.NewEmail = "new@example.org"
+	cfg.StripTitlePatterns = []string{`\s*\(#\d+\)`}
+	cfg.StripBodyPatterns = []string{`^Reviewed-on:.*$`}
+	cfg.Logger = testLogger{}
+
+	if err := RewriteCommitsBatch(cfg); err != nil {
+		t.Fatalf("RewriteCommitsBatch() error = %v", err)
+	}
+
+	msg := runGitOutput(t, workDir, "log", "--format=%B", "-1")
+	want := "chore: setup repo\n"
+	if strings.TrimSpace(msg) != strings.TrimSpace(want) {
+		t.Fatalf("filter-branch fallback rewritten message = %q want %q", msg, want)
+	}
+}
+
 func writeFile(t *testing.T, path string, contents string) {
 	t.Helper()
 	if err := os.WriteFile(path, []byte(contents), 0644); err != nil {

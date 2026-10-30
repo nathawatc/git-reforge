@@ -67,7 +67,17 @@ esac
 		return fmt.Errorf("failed to write filter script: %w", err)
 	}
 
-	cmd := exec.Command("git", "filter-branch", "-f", "--env-filter", ". "+shell.QuoteSingle(filterScript), "--tag-name-filter", "cat", "--", "--all")
+	args := []string{"git", "filter-branch", "-f", "--env-filter", ". " + shell.QuoteSingle(filterScript)}
+	if len(cfg.StripTitlePatterns) > 0 || len(cfg.StripBodyPatterns) > 0 {
+		msgFilterScript, err := generateBatchMessageFilter(cfg)
+		if err != nil {
+			return err
+		}
+		args = append(args, "--msg-filter", ". "+shell.QuoteSingle(msgFilterScript))
+	}
+	args = append(args, "--tag-name-filter", "cat", "--", "--all")
+
+	cmd := exec.Command(args[0], args[1:]...)
 	cmd.Dir = cfg.WorkDir()
 	cmd.Env = append(os.Environ(),
 		"FILTER_NEW_NAME="+cfg.NewName,
@@ -113,7 +123,7 @@ func RewriteCommitsInteractive(cfg *config.Config) error {
 		args = append(args, "--env-filter", ". "+shell.QuoteSingle(envFilterScript))
 	}
 
-	if len(cfg.State.CommitMessages) > 0 {
+	if len(cfg.State.CommitMessages) > 0 || len(cfg.StripTitlePatterns) > 0 || len(cfg.StripBodyPatterns) > 0 {
 		msgFilterScript, err := generateMessageFilter(cfg)
 		if err != nil {
 			return err
@@ -162,6 +172,16 @@ func generateInteractiveFilter(cfg *config.Config) (string, error) {
 }
 
 func generateMessageFilter(cfg *config.Config) (string, error) {
+	hasStrip := len(cfg.StripTitlePatterns) > 0 || len(cfg.StripBodyPatterns) > 0
+	var filterPyScript string
+	if hasStrip {
+		filterScript, err := generateBatchMessageFilter(cfg)
+		if err != nil {
+			return "", err
+		}
+		filterPyScript = filterScript
+	}
+
 	scriptPath := filepath.Join(cfg.TempDir, "msg_filter.sh")
 
 	var script strings.Builder
@@ -175,9 +195,17 @@ func generateMessageFilter(cfg *config.Config) (string, error) {
 		if err := os.WriteFile(msgFile, []byte(msg), 0644); err != nil {
 			return "", fmt.Errorf("failed to write message file: %w", err)
 		}
-		fmt.Fprintf(&script, "    %s)\n        cat %s\n        ;;\n", hash, shell.QuoteSingle(msgFile))
+		if hasStrip {
+			fmt.Fprintf(&script, "    %s)\n        cat %s | . %s\n        ;;\n", hash, shell.QuoteSingle(msgFile), shell.QuoteSingle(filterPyScript))
+		} else {
+			fmt.Fprintf(&script, "    %s)\n        cat %s\n        ;;\n", hash, shell.QuoteSingle(msgFile))
+		}
 	}
-	script.WriteString("    *)\n        cat\n        ;;\nesac\n")
+	if hasStrip {
+		fmt.Fprintf(&script, "    *)\n        . %s\n        ;;\nesac\n", shell.QuoteSingle(filterPyScript))
+	} else {
+		script.WriteString("    *)\n        cat\n        ;;\nesac\n")
+	}
 
 	if err := os.WriteFile(scriptPath, []byte(script.String()), 0755); err != nil {
 		return "", fmt.Errorf("failed to write message filter script: %w", err)
@@ -186,13 +214,91 @@ func generateMessageFilter(cfg *config.Config) (string, error) {
 	return scriptPath, nil
 }
 
+func generateBatchMessageFilter(cfg *config.Config) (string, error) {
+	stripTitle := cfg.StripTitlePatterns
+	if stripTitle == nil {
+		stripTitle = []string{}
+	}
+	stripBody := cfg.StripBodyPatterns
+	if stripBody == nil {
+		stripBody = []string{}
+	}
+
+	dataFile := filepath.Join(cfg.TempDir, "filter_strip_batch.json")
+	data := map[string]interface{}{
+		"strip_title": stripTitle,
+		"strip_body":  stripBody,
+	}
+	b, err := json.Marshal(data)
+	if err != nil {
+		return "", err
+	}
+	if err := os.WriteFile(dataFile, b, 0644); err != nil {
+		return "", err
+	}
+
+	pyScript := filepath.Join(cfg.TempDir, "batch_msg_filter.py")
+	scriptContent := fmt.Sprintf(`import sys, re, json
+with open(%q, 'r', encoding='utf-8') as f:
+    cfg = json.load(f)
+
+strip_title = [re.compile(p.encode('utf-8')) for p in (cfg.get('strip_title') or [])]
+strip_body = []
+for p in (cfg.get('strip_body') or []):
+    pat = p.encode('utf-8')
+    if pat.endswith(b'$'):
+        pat += rb'(?:\r?\n)?'
+    strip_body.append(re.compile(pat, re.MULTILINE))
+
+raw = sys.stdin.buffer.read()
+parts = raw.split(b'\n', 1)
+title = parts[0]
+body = parts[1] if len(parts) > 1 else b''
+
+for p in strip_title:
+    title = p.sub(b'', title)
+title = title.rstrip()
+
+for p in strip_body:
+    body = p.sub(b'', body)
+body = re.sub(rb'\n{3,}', rb'\n\n', body).strip(b'\r\n')
+
+if body:
+    sys.stdout.buffer.write(title + b'\n\n' + body + b'\n')
+else:
+    sys.stdout.buffer.write(title + b'\n')
+`, dataFile)
+	if err := os.WriteFile(pyScript, []byte(scriptContent), 0755); err != nil {
+		return "", err
+	}
+
+	shScript := filepath.Join(cfg.TempDir, "batch_msg_filter.sh")
+	shContent := fmt.Sprintf("#!/usr/bin/env sh\npython3 %s\n", shell.QuoteSingle(pyScript))
+	if err := os.WriteFile(shScript, []byte(shContent), 0755); err != nil {
+		return "", err
+	}
+
+	return shScript, nil
+}
+
 func rewriteBatchFilterRepo(cfg *config.Config) error {
 	log := cfg.Logger
+	stripTitle := cfg.StripTitlePatterns
+	if stripTitle == nil {
+		stripTitle = []string{}
+	}
+	stripBody := cfg.StripBodyPatterns
+	if stripBody == nil {
+		stripBody = []string{}
+	}
+
 	dataFile := filepath.Join(cfg.TempDir, "filter_batch.json")
 	data := map[string]interface{}{
-		"old_names": cfg.OldNames,
-		"new_name":  cfg.NewName,
-		"new_email": cfg.NewEmail,
+		"old_names":   cfg.OldNames,
+		"new_name":    cfg.NewName,
+		"new_email":   cfg.NewEmail,
+		"strip_title": stripTitle,
+		"strip_body":  stripBody,
 	}
 	b, err := json.Marshal(data)
 	if err != nil {
@@ -202,7 +308,7 @@ func rewriteBatchFilterRepo(cfg *config.Config) error {
 		return err
 	}
 
-	pyCallback := fmt.Sprintf(`import json
+	pyCallback := fmt.Sprintf(`import json, re
 with open(%q, 'r', encoding='utf-8') as f:
     cfg = json.load(f)
 
@@ -219,6 +325,32 @@ if commit.committer_name in old_names:
     if new_name:
         commit.committer_name = new_name
     commit.committer_email = new_email
+
+strip_title = [re.compile(p.encode('utf-8')) for p in (cfg.get('strip_title') or [])]
+strip_body = []
+for p in (cfg.get('strip_body') or []):
+    pat = p.encode('utf-8')
+    if pat.endswith(b'$'):
+        pat += rb'(?:\r?\n)?'
+    strip_body.append(re.compile(pat, re.MULTILINE))
+
+if strip_title or strip_body:
+    parts = commit.message.split(b'\n', 1)
+    title = parts[0]
+    body = parts[1] if len(parts) > 1 else b''
+
+    for p in strip_title:
+        title = p.sub(b'', title)
+    title = title.rstrip()
+
+    for p in strip_body:
+        body = p.sub(b'', body)
+    body = re.sub(rb'\n{3,}', rb'\n\n', body).strip(b'\r\n')
+
+    if body:
+        commit.message = title + b'\n\n' + body + b'\n'
+    else:
+        commit.message = title + b'\n'
 `, dataFile)
 
 	cmd := exec.Command("git", "filter-repo", "--force", "--commit-callback", pyCallback)
@@ -232,10 +364,21 @@ if commit.committer_name in old_names:
 
 func rewriteInteractiveFilterRepo(cfg *config.Config) error {
 	log := cfg.Logger
+	stripTitle := cfg.StripTitlePatterns
+	if stripTitle == nil {
+		stripTitle = []string{}
+	}
+	stripBody := cfg.StripBodyPatterns
+	if stripBody == nil {
+		stripBody = []string{}
+	}
+
 	dataFile := filepath.Join(cfg.TempDir, "filter_interactive.json")
 	data := map[string]interface{}{
-		"overrides": cfg.State.CommitOverrides,
-		"messages":  cfg.State.CommitMessages,
+		"overrides":   cfg.State.CommitOverrides,
+		"messages":    cfg.State.CommitMessages,
+		"strip_title": stripTitle,
+		"strip_body":  stripBody,
 	}
 	b, err := json.Marshal(data)
 	if err != nil {
@@ -245,7 +388,7 @@ func rewriteInteractiveFilterRepo(cfg *config.Config) error {
 		return err
 	}
 
-	pyCallback := fmt.Sprintf(`import json
+	pyCallback := fmt.Sprintf(`import json, re
 with open(%q, 'r', encoding='utf-8') as f:
     cfg = json.load(f)
 
@@ -270,6 +413,32 @@ if cid in messages:
     if not msg.endswith('\n'):
         msg += '\n'
     commit.message = msg.encode('utf-8')
+
+strip_title = [re.compile(p.encode('utf-8')) for p in (cfg.get('strip_title') or [])]
+strip_body = []
+for p in (cfg.get('strip_body') or []):
+    pat = p.encode('utf-8')
+    if pat.endswith(b'$'):
+        pat += rb'(?:\r?\n)?'
+    strip_body.append(re.compile(pat, re.MULTILINE))
+
+if strip_title or strip_body:
+    parts = commit.message.split(b'\n', 1)
+    title = parts[0]
+    body = parts[1] if len(parts) > 1 else b''
+
+    for p in strip_title:
+        title = p.sub(b'', title)
+    title = title.rstrip()
+
+    for p in strip_body:
+        body = p.sub(b'', body)
+    body = re.sub(rb'\n{3,}', rb'\n\n', body).strip(b'\r\n')
+
+    if body:
+        commit.message = title + b'\n\n' + body + b'\n'
+    else:
+        commit.message = title + b'\n'
 `, dataFile)
 
 	cmd := exec.Command("git", "filter-repo", "--force", "--commit-callback", pyCallback)

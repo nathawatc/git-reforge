@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"slices"
 	"strings"
 )
@@ -50,6 +51,24 @@ func Validate(cfg *Config) error {
 
 	if slices.Contains(cfg.OldNames, "") {
 		return fmt.Errorf("empty string is not a valid old author name (-f, --from)")
+	}
+
+	for _, p := range cfg.StripTitlePatterns {
+		if strings.TrimSpace(p) == "" {
+			return fmt.Errorf("empty regex pattern is not allowed for --strip-title")
+		}
+		if _, err := regexp.Compile(p); err != nil {
+			return fmt.Errorf("invalid regex for --strip-title %q: %w", p, err)
+		}
+	}
+
+	for _, p := range cfg.StripBodyPatterns {
+		if strings.TrimSpace(p) == "" {
+			return fmt.Errorf("empty regex pattern is not allowed for --strip-body")
+		}
+		if _, err := regexp.Compile(p); err != nil {
+			return fmt.Errorf("invalid regex for --strip-body %q: %w", p, err)
+		}
 	}
 
 	if cfg.GPGKey != "" && cfg.SSHKey != "" {

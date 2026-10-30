@@ -68,6 +68,16 @@ func main() {
 				Name:  "coauthor-to",
 				Usage: "Replacement Co-authored-by identity (\"Name <email>\", default: --to)",
 			},
+			&cli.StringSliceFlag{
+				Name:    "strip-title",
+				Aliases: []string{"strip-subject"},
+				Usage:   "Regex pattern(s) to strip from commit title (can be specified multiple times)",
+			},
+			&cli.StringSliceFlag{
+				Name:    "strip-body",
+				Aliases: []string{"strip-message"},
+				Usage:   "Regex pattern(s) to strip from commit body (can be specified multiple times)",
+			},
 			&cli.StringFlag{
 				Name:  "save-dir",
 				Usage: "Save the rewritten repository to <path>",
@@ -138,6 +148,8 @@ func main() {
 			}
 
 			cfg.OldNames = config.ParseOldNames(c.StringSlice("from"))
+			cfg.StripTitlePatterns = c.StringSlice("strip-title")
+			cfg.StripBodyPatterns = c.StringSlice("strip-body")
 
 			if err := config.Validate(cfg); err != nil {
 				log.Error(err.Error())
