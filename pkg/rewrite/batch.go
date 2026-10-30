@@ -6,7 +6,6 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"slices"
 	"strings"
 
 	"git-reforge/pkg/config"
@@ -17,15 +16,7 @@ func RewriteCommitsBatch(cfg *config.Config) error {
 	log := cfg.Logger
 	log.Header("Rewriting Commit History")
 
-	displayedOld := cfg.OldRawAuthors
-	if len(displayedOld) == 0 {
-		displayedOld = append([]string{}, cfg.OldNames...)
-		for _, e := range cfg.OldEmails {
-			if !slices.Contains(displayedOld, e) {
-				displayedOld = append(displayedOld, e)
-			}
-		}
-	}
+	displayedOld := cfg.DisplayedOldAuthors()
 
 	if cfg.NewName != "" {
 		if len(displayedOld) == 1 {
@@ -138,7 +129,8 @@ func RewriteCommitsInteractive(cfg *config.Config) error {
 	log := cfg.Logger
 	log.Header("Rewriting Commit History (Interactive)")
 
-	if len(cfg.State.CommitOverrides) == 0 && len(cfg.State.CommitMessages) == 0 {
+	if len(cfg.State.CommitOverrides) == 0 && len(cfg.State.CommitMessages) == 0 &&
+		len(cfg.StripTitlePatterns) == 0 && len(cfg.StripBodyPatterns) == 0 {
 		log.Warning("No commits selected for modification")
 		return nil
 	}
@@ -197,11 +189,13 @@ func generateInteractiveFilter(cfg *config.Config) (string, error) {
 		} else {
 			fmt.Fprintf(&script, "    %s)\n", hash)
 			if override.Name != "" {
-				fmt.Fprintf(&script, "        export GIT_AUTHOR_NAME=\"%s\"\n", shell.EscapeDoubleQuoted(override.Name))
-				fmt.Fprintf(&script, "        export GIT_COMMITTER_NAME=\"%s\"\n", shell.EscapeDoubleQuoted(override.Name))
+				fmt.Fprintf(&script, "        export GIT_AUTHOR_NAME=%s\n", shell.QuoteSingle(override.Name))
+				fmt.Fprintf(&script, "        export GIT_COMMITTER_NAME=%s\n", shell.QuoteSingle(override.Name))
 			}
-			fmt.Fprintf(&script, "        export GIT_AUTHOR_EMAIL=\"%s\"\n", shell.EscapeDoubleQuoted(override.Email))
-			fmt.Fprintf(&script, "        export GIT_COMMITTER_EMAIL=\"%s\"\n", shell.EscapeDoubleQuoted(override.Email))
+			if override.Email != "" {
+				fmt.Fprintf(&script, "        export GIT_AUTHOR_EMAIL=%s\n", shell.QuoteSingle(override.Email))
+				fmt.Fprintf(&script, "        export GIT_COMMITTER_EMAIL=%s\n", shell.QuoteSingle(override.Email))
+			}
 			script.WriteString("        ;;\n")
 		}
 	}
@@ -239,13 +233,13 @@ func generateMessageFilter(cfg *config.Config) (string, error) {
 			return "", fmt.Errorf("failed to write message file: %w", err)
 		}
 		if hasStrip {
-			fmt.Fprintf(&script, "    %s)\n        cat %s | . %s\n        ;;\n", hash, shell.QuoteSingle(msgFile), shell.QuoteSingle(filterPyScript))
+			fmt.Fprintf(&script, "    %s)\n        sh %s < %s\n        ;;\n", hash, shell.QuoteSingle(filterPyScript), shell.QuoteSingle(msgFile))
 		} else {
 			fmt.Fprintf(&script, "    %s)\n        cat %s\n        ;;\n", hash, shell.QuoteSingle(msgFile))
 		}
 	}
 	if hasStrip {
-		fmt.Fprintf(&script, "    *)\n        . %s\n        ;;\nesac\n", shell.QuoteSingle(filterPyScript))
+		fmt.Fprintf(&script, "    *)\n        sh %s\n        ;;\nesac\n", shell.QuoteSingle(filterPyScript))
 	} else {
 		script.WriteString("    *)\n        cat\n        ;;\nesac\n")
 	}
@@ -268,7 +262,7 @@ func generateBatchMessageFilter(cfg *config.Config) (string, error) {
 	}
 
 	dataFile := filepath.Join(cfg.TempDir, "filter_strip_batch.json")
-	data := map[string]interface{}{
+	data := map[string]any{
 		"strip_title": stripTitle,
 		"strip_body":  stripBody,
 	}
@@ -316,13 +310,40 @@ else:
 	}
 
 	shScript := filepath.Join(cfg.TempDir, "batch_msg_filter.sh")
-	shContent := fmt.Sprintf("#!/usr/bin/env sh\npython3 %s\n", shell.QuoteSingle(pyScript))
+	shContent := fmt.Sprintf("#!/usr/bin/env sh\nexec python3 %s\n", shell.QuoteSingle(pyScript))
 	if err := os.WriteFile(shScript, []byte(shContent), 0755); err != nil {
 		return "", err
 	}
 
 	return shScript, nil
 }
+
+const pyStripCommitMessage = `strip_title = [re.compile(p.encode('utf-8')) for p in (cfg.get('strip_title') or [])]
+strip_body = []
+for p in (cfg.get('strip_body') or []):
+    pat = p.encode('utf-8')
+    if pat.endswith(b'$'):
+        pat += rb'(?:\r?\n)?'
+    strip_body.append(re.compile(pat, re.MULTILINE))
+
+if strip_title or strip_body:
+    parts = commit.message.split(b'\n', 1)
+    title = parts[0]
+    body = parts[1] if len(parts) > 1 else b''
+
+    for p in strip_title:
+        title = p.sub(b'', title)
+    title = title.rstrip()
+
+    for p in strip_body:
+        body = p.sub(b'', body)
+    body = re.sub(rb'\n{3,}', rb'\n\n', body).strip(b'\r\n')
+
+    if body:
+        commit.message = title + b'\n\n' + body + b'\n'
+    else:
+        commit.message = title + b'\n'
+`
 
 func rewriteBatchFilterRepo(cfg *config.Config) error {
 	log := cfg.Logger
@@ -336,7 +357,7 @@ func rewriteBatchFilterRepo(cfg *config.Config) error {
 	}
 
 	dataFile := filepath.Join(cfg.TempDir, "filter_batch.json")
-	data := map[string]interface{}{
+	data := map[string]any{
 		"old_names":   cfg.OldNames,
 		"old_emails":  cfg.OldEmails,
 		"new_name":    cfg.NewName,
@@ -373,32 +394,7 @@ if match_committer:
         commit.committer_name = new_name
     commit.committer_email = new_email
 
-strip_title = [re.compile(p.encode('utf-8')) for p in (cfg.get('strip_title') or [])]
-strip_body = []
-for p in (cfg.get('strip_body') or []):
-    pat = p.encode('utf-8')
-    if pat.endswith(b'$'):
-        pat += rb'(?:\r?\n)?'
-    strip_body.append(re.compile(pat, re.MULTILINE))
-
-if strip_title or strip_body:
-    parts = commit.message.split(b'\n', 1)
-    title = parts[0]
-    body = parts[1] if len(parts) > 1 else b''
-
-    for p in strip_title:
-        title = p.sub(b'', title)
-    title = title.rstrip()
-
-    for p in strip_body:
-        body = p.sub(b'', body)
-    body = re.sub(rb'\n{3,}', rb'\n\n', body).strip(b'\r\n')
-
-    if body:
-        commit.message = title + b'\n\n' + body + b'\n'
-    else:
-        commit.message = title + b'\n'
-`, dataFile)
+`+pyStripCommitMessage, dataFile)
 
 	cmd := exec.Command("git", "filter-repo", "--force", "--commit-callback", pyCallback)
 	cmd.Dir = cfg.WorkDir()
@@ -421,7 +417,7 @@ func rewriteInteractiveFilterRepo(cfg *config.Config) error {
 	}
 
 	dataFile := filepath.Join(cfg.TempDir, "filter_interactive.json")
-	data := map[string]interface{}{
+	data := map[string]any{
 		"overrides":   cfg.State.CommitOverrides,
 		"messages":    cfg.State.CommitMessages,
 		"strip_title": stripTitle,
@@ -461,32 +457,7 @@ if cid in messages:
         msg += '\n'
     commit.message = msg.encode('utf-8')
 
-strip_title = [re.compile(p.encode('utf-8')) for p in (cfg.get('strip_title') or [])]
-strip_body = []
-for p in (cfg.get('strip_body') or []):
-    pat = p.encode('utf-8')
-    if pat.endswith(b'$'):
-        pat += rb'(?:\r?\n)?'
-    strip_body.append(re.compile(pat, re.MULTILINE))
-
-if strip_title or strip_body:
-    parts = commit.message.split(b'\n', 1)
-    title = parts[0]
-    body = parts[1] if len(parts) > 1 else b''
-
-    for p in strip_title:
-        title = p.sub(b'', title)
-    title = title.rstrip()
-
-    for p in strip_body:
-        body = p.sub(b'', body)
-    body = re.sub(rb'\n{3,}', rb'\n\n', body).strip(b'\r\n')
-
-    if body:
-        commit.message = title + b'\n\n' + body + b'\n'
-    else:
-        commit.message = title + b'\n'
-`, dataFile)
+`+pyStripCommitMessage, dataFile)
 
 	cmd := exec.Command("git", "filter-repo", "--force", "--commit-callback", pyCallback)
 	cmd.Dir = cfg.WorkDir()
