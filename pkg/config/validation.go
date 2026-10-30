@@ -2,6 +2,7 @@ package config
 
 import (
 	"fmt"
+	"net/mail"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -17,6 +18,19 @@ func ParseOldNames(values []string) []string {
 	return names
 }
 
+// ParseAuthor parses a Git author identity in "Name <email>" or bare "email" format.
+func ParseAuthor(raw string) (name, email string, err error) {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return "", "", nil
+	}
+	addr, err := mail.ParseAddress(raw)
+	if err != nil {
+		return "", "", fmt.Errorf("invalid author format: %q (expected \"Name <email>\" or \"email\")", raw)
+	}
+	return addr.Name, addr.Address, nil
+}
+
 func Validate(cfg *Config) error {
 	if cfg.SourceURL == "" {
 		return fmt.Errorf("source repository is required (<source>)")
@@ -27,15 +41,15 @@ func Validate(cfg *Config) error {
 	}
 
 	if cfg.NewEmail == "" {
-		return fmt.Errorf("new email is required (-e, --new-email)")
+		return fmt.Errorf("new author is required (-t, --to)")
 	}
 
 	if len(cfg.OldNames) == 0 {
-		return fmt.Errorf("at least one old author name is required (-o, --old-name)")
+		return fmt.Errorf("at least one old author name is required (-f, --from)")
 	}
 
 	if slices.Contains(cfg.OldNames, "") {
-		return fmt.Errorf("empty string is not a valid old author name (-o, --old-name)")
+		return fmt.Errorf("empty string is not a valid old author name (-f, --from)")
 	}
 
 	if cfg.SignMode == "" {
@@ -79,7 +93,7 @@ func Validate(cfg *Config) error {
 			cfg.CoauthorNewEmail = cfg.NewEmail
 		}
 		if cfg.CoauthorMode == "rewrite" && cfg.CoauthorNewName == "" {
-			return fmt.Errorf("coauthor replacement name is required when --coauthor-mode=rewrite (--coauthor-new-name or -n)")
+			return fmt.Errorf("coauthor replacement name is required when --coauthor-mode=rewrite (--coauthor-new-name or -t)")
 		}
 	}
 

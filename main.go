@@ -24,18 +24,13 @@ func main() {
 		ArgsUsage: "<source> [dest]",
 		Flags: []cli.Flag{
 			&cli.StringFlag{
-				Name:    "new-name",
-				Aliases: []string{"n"},
-				Usage:   "New author name",
-			},
-			&cli.StringFlag{
-				Name:    "new-email",
-				Aliases: []string{"e"},
-				Usage:   "New author email",
+				Name:    "to",
+				Aliases: []string{"t"},
+				Usage:   "New author identity (\"Name <email>\" or \"email\")",
 			},
 			&cli.StringSliceFlag{
-				Name:    "old-name",
-				Aliases: []string{"o"},
+				Name:    "from",
+				Aliases: []string{"f", "old-name", "o"},
 				Usage:   "Old author name(s) to replace",
 			},
 			&cli.BoolFlag{
@@ -109,14 +104,20 @@ func main() {
 				}
 			}
 
-			cfg.NewName = c.String("new-name")
-			cfg.NewEmail = c.String("new-email")
+			if to := c.String("to"); to != "" {
+				name, email, err := config.ParseAuthor(to)
+				if err != nil {
+					log.Error(err.Error())
+					return err
+				}
+				cfg.NewName = name
+				cfg.NewEmail = email
+			}
+
 			cfg.Interactive = c.Bool("interactive")
 			cfg.SignMode = c.String("sign-mode")
 			cfg.GPGKey = c.String("gpg-key")
 			cfg.SSHKey = c.String("ssh-key")
-			cfg.SaveDir = c.String("save-dir")
-			cfg.NoPush = c.Bool("no-push")
 			cfg.Yes = c.Bool("yes")
 			cfg.CoauthorMode = c.String("coauthor-mode")
 			cfg.CoauthorOldName = c.String("coauthor-old")
@@ -128,7 +129,7 @@ func main() {
 				cfg.SignMode = "none"
 			}
 
-			cfg.OldNames = config.ParseOldNames(c.StringSlice("old-name"))
+			cfg.OldNames = config.ParseOldNames(c.StringSlice("from"))
 
 			if err := config.Validate(cfg); err != nil {
 				log.Error(err.Error())

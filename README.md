@@ -58,35 +58,34 @@ go build .
 
 ### Required Options
 
-| Option                    | Description      |
-| ------------------------- | ---------------- |
-| `-e, --new-email <email>` | New author email |
+| Option              | Description                                                   |
+| ------------------- | ------------------------------------------------------------- |
+| `-t, --to <author>` | New author identity (`"Name <email>"` or `"email"`)           |
+| `-f, --from <name>` | Old author name(s) to replace (repeatable or comma-separated) |
 
 ### Optional Options
 
-| Option                  | Description                                                    |
-| ----------------------- | -------------------------------------------------------------- |
-| `-n, --new-name <name>` | New author name (optional; preserves original name if omitted) |
-| `-o, --old-name <name>` | Old author name(s) to replace (repeatable or comma-separated)  |
-| `-i, --interactive`     | Enable interactive mode for per-commit editing                 |
-| `--sign-mode <mode>`    | Signing mode: `keep\|gpg\|ssh\|none` (default: `keep`)         |
-| `--gpg-key <keyid>`     | GPG key ID for re-signing (required if `--sign-mode=gpg`)      |
-| `--ssh-key <path>`      | SSH key path for re-signing (required if `--sign-mode=ssh`)    |
-| `--nosign`              | Shorthand for `--sign-mode=none`                               |
-| `--save-dir <path>`     | Save rewritten repo to `<path>` (directory must not exist)     |
-| `--no-push`             | Rewrite history locally but skip pushing to destination        |
-| `-y, --yes`             | Skip confirmation prompt for non-interactive / CI runs         |
-| `-h, --help`            | Show help message                                              |
+| Option               | Description                                                 |
+| -------------------- | ----------------------------------------------------------- |
+| `-i, --interactive`  | Enable interactive mode for per-commit editing              |
+| `--sign-mode <mode>` | Signing mode: `keep\|gpg\|ssh\|none` (default: `keep`)      |
+| `--gpg-key <keyid>`  | GPG key ID for re-signing (required if `--sign-mode=gpg`)   |
+| `--ssh-key <path>`   | SSH key path for re-signing (required if `--sign-mode=ssh`) |
+| `--nosign`           | Shorthand for `--sign-mode=none`                            |
+| `--save-dir <path>`  | Save rewritten repo to `<path>` (directory must not exist)  |
+| `--no-push`          | Rewrite history locally but skip pushing to destination     |
+| `-y, --yes`          | Skip confirmation prompt for non-interactive / CI runs      |
+| `-h, --help`         | Show help message                                           |
 
 ### Co-Authored-by Options
 
-| Option                         | Description                                                              |
-| ------------------------------ | ------------------------------------------------------------------------ |
-| `--coauthor-mode <mode>`       | Trailer mode: `rewrite\|remove\|interactive`                             |
-| `--coauthor-old <name>`        | Name to match in `Co-authored-by` trailers (default: first `--old-name`) |
-| `--coauthor-old-email <email>` | Email to narrow trailer match (optional)                                 |
-| `--coauthor-new-name <name>`   | Replacement trailer name (default: `--new-name` value)                   |
-| `--coauthor-new-email <email>` | Replacement trailer email (default: `--new-email` value)                 |
+| Option                         | Description                                                          |
+| ------------------------------ | -------------------------------------------------------------------- |
+| `--coauthor-mode <mode>`       | Trailer mode: `rewrite\|remove\|interactive`                         |
+| `--coauthor-old <name>`        | Name to match in `Co-authored-by` trailers (default: first `--from`) |
+| `--coauthor-old-email <email>` | Email to narrow trailer match (optional)                             |
+| `--coauthor-new-name <name>`   | Replacement trailer name (default: name from `--to`)                 |
+| `--coauthor-new-email <email>` | Replacement trailer email (default: email from `--to`)               |
 
 ### Examples
 
@@ -98,8 +97,8 @@ go build .
 ```bash
 ./git-reforge https://github.com/user/repo.git \
   https://codeberg.org/user/repo.git \
-  -o "OldName" \
-  -e myuser@noreply.codeberg.org
+  -f "OldName" \
+  -t myuser@noreply.codeberg.org
 ```
 
 **Non-interactive / CI run:**
@@ -107,8 +106,8 @@ go build .
 ```bash
 ./git-reforge https://github.com/user/repo.git \
   https://codeberg.org/user/repo.git \
-  -o "OldName" -n "NewName" \
-  -e myuser@noreply.codeberg.org \
+  -f "OldName" \
+  -t "NewName <myuser@noreply.codeberg.org>" \
   -y
 ```
 
@@ -117,8 +116,8 @@ go build .
 ```bash
 ./git-reforge https://github.com/user/repo.git \
   https://codeberg.org/user/repo.git \
-  -o "OldName" -n "NewName" \
-  -e newuser@noreply.codeberg.org \
+  -f "OldName" \
+  -t "NewName <newuser@noreply.codeberg.org>" \
   -i
 ```
 
@@ -127,8 +126,8 @@ go build .
 ```bash
 ./git-reforge https://github.com/user/repo.git \
   https://codeberg.org/user/repo.git \
-  -o "OldName" \
-  -e myuser@noreply.codeberg.org \
+  -f "OldName" \
+  -t myuser@noreply.codeberg.org \
   --sign-mode gpg --gpg-key ABCD1234
 ```
 
@@ -137,8 +136,8 @@ go build .
 ```bash
 ./git-reforge https://github.com/user/repo.git \
   https://codeberg.org/user/repo.git \
-  -o "OldName" \
-  -e myuser@noreply.codeberg.org \
+  -f "OldName" \
+  -t myuser@noreply.codeberg.org \
   --sign-mode ssh --ssh-key ~/.ssh/id_ed25519
 ```
 
@@ -147,9 +146,8 @@ go build .
 ```bash
 ./git-reforge https://github.com/user/repo.git \
   https://codeberg.org/user/repo.git \
-  -o "OldName1" -o "OldName2" \
-  -n "NewName" \
-  -e newuser@noreply.codeberg.org
+  -f "OldName1" -f "OldName2" \
+  -t "NewName <newuser@noreply.codeberg.org>"
 ```
 
 **Rewrite locally and save without pushing:**
@@ -157,8 +155,8 @@ go build .
 ```bash
 ./git-reforge https://github.com/user/repo.git \
   /path/to/output \
-  -o "OldName" -n "NewName" \
-  -e newuser@noreply.codeberg.org
+  -f "OldName" \
+  -t "NewName <newuser@noreply.codeberg.org>"
 ```
 
 **Save a local copy and push:**
@@ -166,8 +164,8 @@ go build .
 ```bash
 ./git-reforge https://github.com/user/repo.git \
   https://codeberg.org/user/repo.git \
-  -o "OldName" -n "NewName" \
-  -e newuser@noreply.codeberg.org \
+  -f "OldName" \
+  -t "NewName <newuser@noreply.codeberg.org>" \
   --save-dir /path/to/output
 ```
 
@@ -176,8 +174,8 @@ go build .
 ```bash
 ./git-reforge https://github.com/user/repo.git \
   https://codeberg.org/user/repo.git \
-  -o "OldName" \
-  -e myuser@noreply.codeberg.org \
+  -f "OldName" \
+  -t myuser@noreply.codeberg.org \
   --coauthor-mode remove --coauthor-old "OldName"
 ```
 
@@ -186,8 +184,8 @@ go build .
 ```bash
 ./git-reforge https://github.com/user/repo.git \
   https://codeberg.org/user/repo.git \
-  -o "OldName" \
-  -e myuser@noreply.codeberg.org \
+  -f "OldName" \
+  -t myuser@noreply.codeberg.org \
   --coauthor-mode rewrite \
   --coauthor-old "OldName" \
   --coauthor-old-email "oldname@users.noreply.github.com" \
@@ -200,8 +198,8 @@ go build .
 ```bash
 ./git-reforge https://github.com/user/repo.git \
   https://codeberg.org/user/repo.git \
-  -o "OldName" \
-  -e myuser@noreply.codeberg.org \
+  -f "OldName" \
+  -t myuser@noreply.codeberg.org \
   --coauthor-mode interactive --coauthor-old "OldName"
 ```
 

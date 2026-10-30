@@ -162,3 +162,34 @@ func TestIsLocalPath(t *testing.T) {
 		}
 	}
 }
+
+func TestParseAuthor(t *testing.T) {
+	tests := []struct {
+		input     string
+		wantName  string
+		wantEmail string
+		wantErr   bool
+	}{
+		{"Jane Doe <jane@example.com>", "Jane Doe", "jane@example.com", false},
+		{"<jane@example.com>", "", "jane@example.com", false},
+		{"jane@example.com", "", "jane@example.com", false},
+		{"  Alice <alice@example.org>  ", "Alice", "alice@example.org", false},
+		{"", "", "", false},
+		{"Jane Doe", "", "", true},
+		{"not-an-email", "", "", true},
+	}
+
+	for _, tt := range tests {
+		name, email, err := ParseAuthor(tt.input)
+		if (err != nil) != tt.wantErr {
+			t.Errorf("ParseAuthor(%q) err = %v, wantErr %v", tt.input, err, tt.wantErr)
+			continue
+		}
+		if name != tt.wantName {
+			t.Errorf("ParseAuthor(%q) name = %q, want %q", tt.input, name, tt.wantName)
+		}
+		if email != tt.wantEmail {
+			t.Errorf("ParseAuthor(%q) email = %q, want %q", tt.input, email, tt.wantEmail)
+		}
+	}
+}
