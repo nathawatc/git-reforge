@@ -129,10 +129,10 @@ func TestMatchesCoauthor(t *testing.T) {
 	}
 }
 
-func TestExtractMatchingLines(t *testing.T) {
+func TestExtractMatchingLinesForTargets(t *testing.T) {
 	body := "Fix bug\n\nCo-authored-by: Alice <alice@example.org>\nCo-authored-by: Bob <bob@example.org>\n"
 
-	got := extractMatchingLines(body, "Alice", "alice@example.org")
+	got := extractMatchingLinesForTargets(body, []coauthorTarget{{Name: "Alice", Email: "alice@example.org"}})
 	if len(got) != 1 {
 		t.Errorf("got %d lines want 1", len(got))
 	}
@@ -140,7 +140,7 @@ func TestExtractMatchingLines(t *testing.T) {
 		t.Errorf("got %q want Alice", got)
 	}
 
-	got2 := extractMatchingLines(body, "Bob", "")
+	got2 := extractMatchingLinesForTargets(body, []coauthorTarget{{Name: "Bob"}})
 	if len(got2) != 1 {
 		t.Errorf("got %d lines want 1", len(got2))
 	}

@@ -432,22 +432,6 @@ func extractMatchingLinesForTargets(body string, targets []coauthorTarget) []str
 	return matches
 }
 
-func extractMatchingLines(body string, name string, email string) []string {
-	var matches []string
-	for line := range strings.SplitSeq(body, "\n") {
-		if email != "" {
-			if strings.Contains(line, "Co-authored-by: "+name+" <"+email+">") {
-				matches = append(matches, line)
-			}
-		} else {
-			if strings.HasPrefix(line, "Co-authored-by: "+name+" ") {
-				matches = append(matches, line)
-			}
-		}
-	}
-	return matches
-}
-
 func promptLoop(commitHash string, remainingCommits []string, cfg *config.Config, prompts *ui.PromptSession) string {
 	for {
 		fmt.Printf("  %s[R]ewrite%s - Replace trailer with new Co-authored-by\n", ui.Green, ui.NC)
