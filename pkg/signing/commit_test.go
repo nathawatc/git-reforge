@@ -246,6 +246,92 @@ func TestHandleSSHSignedCommitsAndAnnotatedTags(t *testing.T) {
 	}
 }
 
+func TestHandleSSHPreservesNonSelectedAuthorSignatures(t *testing.T) {
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skip("git not available")
+	}
+	if _, err := exec.LookPath("ssh-keygen"); err != nil {
+		t.Skip("ssh-keygen not available")
+	}
+
+	tmpDir := t.TempDir()
+	workDir := filepath.Join(tmpDir, "working")
+	if err := os.Mkdir(workDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	aliceKey := filepath.Join(tmpDir, "alice_key")
+	bobKey := filepath.Join(tmpDir, "bob_key")
+	runCmd(t, tmpDir, "ssh-keygen", "-q", "-t", "ed25519", "-N", "", "-f", aliceKey)
+	runCmd(t, tmpDir, "ssh-keygen", "-q", "-t", "ed25519", "-N", "", "-f", bobKey)
+
+	runGit(t, workDir, "init")
+	runGit(t, workDir, "config", "gpg.format", "ssh")
+
+	runGit(t, workDir, "config", "user.name", "Alice")
+	runGit(t, workDir, "config", "user.email", "alice@example.org")
+	runGit(t, workDir, "config", "user.signingkey", aliceKey)
+	runGit(t, workDir, "config", "commit.gpgsign", "true")
+	writeFile(t, filepath.Join(workDir, "a.txt"))
+	runGit(t, workDir, "add", "a.txt")
+	runGit(t, workDir, "commit", "-m", "commit 1 by alice")
+	aliceSHA1 := strings.TrimSpace(runGitOutput(t, workDir, "rev-parse", "HEAD"))
+
+	writeFile(t, filepath.Join(workDir, "a2.txt"))
+	runGit(t, workDir, "add", "a2.txt")
+	runGit(t, workDir, "commit", "-m", "commit 2 by alice")
+	aliceSHA2 := strings.TrimSpace(runGitOutput(t, workDir, "rev-parse", "HEAD"))
+
+	runGit(t, workDir, "config", "user.name", "Bob")
+	runGit(t, workDir, "config", "user.email", "bob@example.org")
+	runGit(t, workDir, "config", "commit.gpgsign", "false")
+	writeFile(t, filepath.Join(workDir, "b.txt"))
+	runGit(t, workDir, "add", "b.txt")
+	runGit(t, workDir, "commit", "-m", "commit 3 by bob")
+
+	runGit(t, workDir, "config", "user.name", "Charlie")
+	runGit(t, workDir, "config", "user.email", "charlie@example.org")
+	writeFile(t, filepath.Join(workDir, "c.txt"))
+	runGit(t, workDir, "add", "c.txt")
+	runGit(t, workDir, "commit", "-m", "commit 4 by charlie")
+
+	cfg := config.New()
+	cfg.TempDir = tmpDir
+	cfg.SignMode = "ssh"
+	cfg.SSHKey = bobKey
+	cfg.NewName = "Bob"
+	cfg.NewEmail = "bob@example.org"
+	cfg.Logger = testLogger{}
+
+	if err := handleSSH(cfg); err != nil {
+		t.Fatalf("handleSSH() error = %v", err)
+	}
+
+	alice1After := strings.TrimSpace(runGitOutput(t, workDir, "rev-list", "--max-parents=0", "HEAD"))
+	if alice1After != aliceSHA1 {
+		t.Fatalf("Alice root commit SHA changed from %s to %s", aliceSHA1, alice1After)
+	}
+
+	alice2After := strings.TrimSpace(runGitOutput(t, workDir, "rev-parse", "HEAD~2"))
+	if alice2After != aliceSHA2 {
+		t.Fatalf("Alice non-root commit SHA changed from %s to %s", aliceSHA2, alice2After)
+	}
+
+	aliceObj := runGitOutput(t, workDir, "cat-file", "commit", alice2After)
+	if !strings.Contains(aliceObj, "-----BEGIN SSH SIGNATURE-----") {
+		t.Fatal("Alice commit lost signature")
+	}
+
+	bobObj := runGitOutput(t, workDir, "cat-file", "commit", "HEAD~1")
+	if !strings.Contains(bobObj, "-----BEGIN SSH SIGNATURE-----") {
+		t.Fatal("Bob commit missing signature")
+	}
+
+	charlieObj := runGitOutput(t, workDir, "cat-file", "commit", "HEAD")
+	if strings.Contains(charlieObj, "-----BEGIN SSH SIGNATURE-----") {
+		t.Fatal("Charlie commit should not be signed with Bob's SSH key")
+	}
+}
+
 func TestHandleGPGSignedCommitsAndAnnotatedTags(t *testing.T) {
 	if _, err := exec.LookPath("git"); err != nil {
 		t.Skip("git not available")

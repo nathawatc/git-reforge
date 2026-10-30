@@ -47,7 +47,7 @@ func handleNone(cfg *config.Config) error {
 func handleGPG(cfg *config.Config) error {
 	log := cfg.Logger
 	log.Header("Re-signing with GPG")
-	log.Info("Re-signing all commits with GPG key: " + cfg.GPGKey)
+	log.Info("Re-signing commits with GPG key: " + cfg.GPGKey)
 
 	cmd := exec.Command("git", "config", "user.signingkey", cfg.GPGKey)
 	cmd.Dir = cfg.WorkDir()
@@ -71,7 +71,8 @@ func handleGPG(cfg *config.Config) error {
 		_ = unsetCmd.Run()
 	}()
 
-	commitFilter := fmt.Sprintf(`git -c gpg.format=openpgp commit-tree -S%s "$@"`, shell.QuoteSingle(cfg.GPGKey))
+	signCmd := fmt.Sprintf(`git -c gpg.format=openpgp commit-tree -S%s`, shell.QuoteSingle(cfg.GPGKey))
+	commitFilter := buildSigningCommitFilter(cfg, signCmd)
 	cmd = exec.Command("git", "filter-branch", "-f", "--commit-filter", commitFilter, "--tag-name-filter", "cat", "--", "--all")
 	cmd.Dir = cfg.WorkDir()
 	if err := shell.RunCommand(cmd, "filter-branch"); err != nil {
@@ -85,7 +86,7 @@ func handleGPG(cfg *config.Config) error {
 func handleSSH(cfg *config.Config) error {
 	log := cfg.Logger
 	log.Header("Re-signing with SSH")
-	log.Info("Re-signing all commits with SSH key: " + cfg.SSHKey)
+	log.Info("Re-signing commits with SSH key: " + cfg.SSHKey)
 
 	cmd := exec.Command("git", "config", "gpg.format", "ssh")
 	cmd.Dir = cfg.WorkDir()
@@ -109,7 +110,8 @@ func handleSSH(cfg *config.Config) error {
 		_ = unsetCmd.Run()
 	}()
 
-	cmd = exec.Command("git", "filter-branch", "-f", "--commit-filter", `git commit-tree -S "$@"`, "--tag-name-filter", "cat", "--", "--all")
+	commitFilter := buildSigningCommitFilter(cfg, `git commit-tree -S`)
+	cmd = exec.Command("git", "filter-branch", "-f", "--commit-filter", commitFilter, "--tag-name-filter", "cat", "--", "--all")
 	cmd.Dir = cfg.WorkDir()
 	if err := shell.RunCommand(cmd, "filter-branch"); err != nil {
 		return err
@@ -117,6 +119,64 @@ func handleSSH(cfg *config.Config) error {
 
 	log.Success("Commits re-signed with SSH")
 	return ResignTags(cfg)
+}
+
+func buildSigningCommitFilter(cfg *config.Config, signCmd string) string {
+	var matchCases []string
+	if cfg.NewEmail != "" {
+		matchCases = append(matchCases, shell.QuoteSingle(cfg.NewEmail))
+	}
+	for _, e := range cfg.OldEmails {
+		if e != "" {
+			matchCases = append(matchCases, shell.QuoteSingle(e))
+		}
+	}
+
+	var nameCases []string
+	if cfg.NewName != "" {
+		nameCases = append(nameCases, shell.QuoteSingle(cfg.NewName))
+	}
+	for _, n := range cfg.OldNames {
+		if n != "" {
+			nameCases = append(nameCases, shell.QuoteSingle(n))
+		}
+	}
+
+	if len(matchCases) == 0 && len(nameCases) == 0 {
+		return signCmd + ` "$@"`
+	}
+
+	var script strings.Builder
+	script.WriteString("match=0\n")
+	if len(matchCases) > 0 {
+		pattern := strings.Join(matchCases, "|")
+		fmt.Fprintf(&script, `case "$GIT_AUTHOR_EMAIL" in %s) match=1 ;; esac
+case "$GIT_COMMITTER_EMAIL" in %s) match=1 ;; esac
+`, pattern, pattern)
+	}
+	if len(nameCases) > 0 {
+		pattern := strings.Join(nameCases, "|")
+		fmt.Fprintf(&script, `case "$GIT_AUTHOR_NAME" in %s) match=1 ;; esac
+case "$GIT_COMMITTER_NAME" in %s) match=1 ;; esac
+`, pattern, pattern)
+	}
+
+	fmt.Fprintf(&script, `if [ "$match" -eq 1 ]; then
+    %s "$@"
+else
+    expected="$(git rev-parse "$GIT_COMMIT^{tree}")"
+    for p in $(git rev-list --parents -n 1 "$GIT_COMMIT" | cut -s -d' ' -f2-); do
+        expected="$expected -p $p"
+    done
+    actual="$*"
+    if [ "$expected" = "$actual" ]; then
+        echo "$GIT_COMMIT"
+    else
+        git commit-tree "$@"
+    fi
+fi`, signCmd)
+
+	return script.String()
 }
 
 func ResignTags(cfg *config.Config) error {
@@ -131,10 +191,25 @@ func ResignTags(cfg *config.Config) error {
 	}
 
 	var annotatedTags []string
+	hasAuthorFilter := cfg.NewEmail != "" || cfg.NewName != "" || len(cfg.OldEmails) > 0 || len(cfg.OldNames) > 0
 	for line := range strings.SplitSeq(string(output), "\n") {
 		parts := strings.SplitN(strings.TrimSpace(line), " ", 2)
 		if len(parts) == 2 && parts[0] == "tag" {
-			annotatedTags = append(annotatedTags, parts[1])
+			tagName := parts[1]
+			if hasAuthorFilter {
+				tagger, err := getTagTagger(cfg.WorkDir(), tagName)
+				if err != nil {
+					return fmt.Errorf("failed to get tagger info for tag %s: %w", tagName, err)
+				}
+				matchesTagger := (cfg.NewName != "" && tagger.name == cfg.NewName) ||
+					(cfg.NewEmail != "" && tagger.email == cfg.NewEmail) ||
+					slices.Contains(cfg.OldNames, tagger.name) ||
+					slices.Contains(cfg.OldEmails, tagger.email)
+				if !matchesTagger {
+					continue
+				}
+			}
+			annotatedTags = append(annotatedTags, tagName)
 		}
 	}
 

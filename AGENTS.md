@@ -133,10 +133,12 @@ No external git library (such as `go-git`) is used; commit hashes are native Go 
   no terminal is attached, returns an error; if a TTY is available, offers an interactive prompt to
   save the rewritten repository locally before exiting.
 
-### Annotated Tag Recreation (`pkg/signing/commit.go`)
+### Annotated Tag Recreation & Commit Signing (`pkg/signing/commit.go`)
 
+- Re-signing commits (`handleGPG`, `handleSSH`) only signs commits matching migrating author
+  identities. Untouched ancestor commits from other authors keep their original SHA and signatures.
 - Re-signing tags (`stripTag`, `resignTagGPG`, `resignTagSSH` via `recreateTag`) must preserve the original
-  release date and author.
+  release date and author. Non-matching tags are left untouched.
 - Reads tag metadata via `git for-each-ref --format="%(taggername)%00%(taggeremail:trim)%00%(taggerdate:raw)"`.
 - Passes `GIT_COMMITTER_NAME`, `GIT_COMMITTER_EMAIL`, and `GIT_COMMITTER_DATE` when executing `git tag`.
 - If the original tagger matches an old author name being migrated, applies `cfg.NewName` / `cfg.NewEmail`.
