@@ -192,6 +192,10 @@ func CheckDependencies(cfg *Config) error {
 		return fmt.Errorf("git is not installed")
 	}
 
+	if _, err := exec.LookPath("git-filter-repo"); err != nil {
+		return fmt.Errorf("git-filter-repo is not installed (required dependency)")
+	}
+
 	if cfg.SignMode == "gpg" {
 		if _, err := exec.LookPath("gpg"); err != nil {
 			return fmt.Errorf("gpg is not installed (required for GPG signing)")

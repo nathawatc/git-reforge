@@ -363,3 +363,17 @@ func TestValidateStripPatterns(t *testing.T) {
 		}
 	})
 }
+
+func TestCheckDependencies(t *testing.T) {
+	cfg := validConfig()
+	if err := CheckDependencies(cfg); err != nil {
+		t.Fatalf("CheckDependencies() unexpected error = %v", err)
+	}
+
+	t.Run("fails when tools are missing from PATH", func(t *testing.T) {
+		t.Setenv("PATH", t.TempDir())
+		if err := CheckDependencies(cfg); err == nil {
+			t.Fatal("CheckDependencies() error = nil, want error when tools are missing")
+		}
+	})
+}
