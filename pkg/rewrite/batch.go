@@ -6,8 +6,10 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strings"
 
+	"git-reforge/pkg/coauthor"
 	"git-reforge/pkg/config"
 	"git-reforge/pkg/shell"
 )
@@ -15,6 +17,10 @@ import (
 func RewriteCommitsBatch(cfg *config.Config) error {
 	log := cfg.Logger
 	log.Header("Rewriting Commit History")
+
+	if !slices.Contains([]string{"keep", "none", "gpg", "ssh"}, cfg.SignMode) {
+		return fmt.Errorf("invalid sign mode: %s", cfg.SignMode)
+	}
 
 	displayedOld := cfg.DisplayedOldAuthors()
 
@@ -31,7 +37,254 @@ func RewriteCommitsBatch(cfg *config.Config) error {
 		log.Info(fmt.Sprintf("Rewriting commit emails to <%s> for author(s): %s", cfg.NewEmail, strings.Join(displayedOld, ", ")))
 	}
 
-	return rewriteBatchFilterRepo(cfg)
+	return rewriteBatchUnified(cfg)
+}
+
+func rewriteBatchUnified(cfg *config.Config) error {
+	log := cfg.Logger
+
+	switch cfg.SignMode {
+	case "ssh":
+		cmd := exec.Command("git", "config", "gpg.format", "ssh")
+		cmd.Dir = cfg.WorkDir()
+		if err := shell.RunCommand(cmd, "git config gpg.format"); err != nil {
+			return err
+		}
+		defer func() {
+			unsetCmd := exec.Command("git", "config", "--unset", "gpg.format")
+			unsetCmd.Dir = cfg.WorkDir()
+			_ = unsetCmd.Run()
+		}()
+
+		cmd = exec.Command("git", "config", "user.signingkey", cfg.SSHKey)
+		cmd.Dir = cfg.WorkDir()
+		if err := shell.RunCommand(cmd, "git config user.signingkey"); err != nil {
+			return err
+		}
+		defer func() {
+			unsetCmd := exec.Command("git", "config", "--unset", "user.signingkey")
+			unsetCmd.Dir = cfg.WorkDir()
+			_ = unsetCmd.Run()
+		}()
+	case "gpg":
+		cmd := exec.Command("git", "config", "gpg.format", "openpgp")
+		cmd.Dir = cfg.WorkDir()
+		if err := shell.RunCommand(cmd, "git config gpg.format"); err != nil {
+			return err
+		}
+		defer func() {
+			unsetCmd := exec.Command("git", "config", "--unset", "gpg.format")
+			unsetCmd.Dir = cfg.WorkDir()
+			_ = unsetCmd.Run()
+		}()
+
+		cmd = exec.Command("git", "config", "user.signingkey", cfg.GPGKey)
+		cmd.Dir = cfg.WorkDir()
+		if err := shell.RunCommand(cmd, "git config user.signingkey"); err != nil {
+			return err
+		}
+		defer func() {
+			unsetCmd := exec.Command("git", "config", "--unset", "user.signingkey")
+			unsetCmd.Dir = cfg.WorkDir()
+			_ = unsetCmd.Run()
+		}()
+	}
+
+	filterScript, err := buildUnifiedFilterScript(cfg)
+	if err != nil {
+		return err
+	}
+
+	cmd := exec.Command("git", "filter-branch", "-f",
+		"--commit-filter", fmt.Sprintf("sh %s \"$@\"", shell.QuoteSingle(filterScript)),
+		"--tag-name-filter", "cat", "--", "--all")
+	cmd.Dir = cfg.WorkDir()
+	if err := shell.RunCommand(cmd, "filter-branch"); err != nil {
+		return err
+	}
+
+	log.Success("Commit history rewritten successfully")
+	return nil
+}
+
+func buildUnifiedFilterScript(cfg *config.Config) (string, error) {
+	scriptPath := filepath.Join(cfg.TempDir, "unified_filter.sh")
+	pyFilterPath, err := generateUnifiedPythonMessageFilter(cfg)
+	if err != nil {
+		return "", err
+	}
+
+	var script strings.Builder
+	script.WriteString("#!/usr/bin/env sh\n")
+
+	var matchCases []string
+	for _, raw := range cfg.OldRawAuthors {
+		_, email, _ := config.ParseAuthor(raw)
+		if email != "" {
+			matchCases = append(matchCases, shell.QuoteSingle(email))
+		}
+	}
+	for _, e := range cfg.OldEmails {
+		if e != "" {
+			matchCases = append(matchCases, shell.QuoteSingle(e))
+		}
+	}
+
+	var nameCases []string
+	for _, raw := range cfg.OldRawAuthors {
+		name, _, _ := config.ParseAuthor(raw)
+		if name != "" {
+			nameCases = append(nameCases, shell.QuoteSingle(name))
+		}
+	}
+	for _, n := range cfg.OldNames {
+		if n != "" {
+			nameCases = append(nameCases, shell.QuoteSingle(n))
+		}
+	}
+
+	if len(matchCases) > 0 || len(nameCases) > 0 {
+		script.WriteString("match=0\n")
+		if len(matchCases) > 0 {
+			pattern := strings.Join(matchCases, "|")
+			fmt.Fprintf(&script, "case \"$GIT_AUTHOR_EMAIL\" in %s) match=1 ;; esac\n", pattern)
+			fmt.Fprintf(&script, "case \"$GIT_COMMITTER_EMAIL\" in %s) match=1 ;; esac\n", pattern)
+		}
+		if len(nameCases) > 0 {
+			pattern := strings.Join(nameCases, "|")
+			fmt.Fprintf(&script, "case \"$GIT_AUTHOR_NAME\" in %s) match=1 ;; esac\n", pattern)
+			fmt.Fprintf(&script, "case \"$GIT_COMMITTER_NAME\" in %s) match=1 ;; esac\n", pattern)
+		}
+	} else {
+		script.WriteString("match=1\n")
+	}
+
+	script.WriteString(`orig_tree="$(git rev-parse "$GIT_COMMIT^{tree}")"
+expected="$orig_tree"
+for p in $(git rev-list --parents -n 1 "$GIT_COMMIT" | cut -s -d' ' -f2-); do
+    expected="$expected -p $p"
+done
+actual="$*"
+
+if [ "$match" -eq 0 ] && [ "$expected" = "$actual" ]; then
+    echo "$GIT_COMMIT"
+    exit 0
+fi
+`)
+
+	script.WriteString("if [ \"$match\" -eq 1 ]; then\n")
+	if cfg.NewName != "" {
+		fmt.Fprintf(&script, "    export GIT_AUTHOR_NAME=%s\n", shell.QuoteSingle(cfg.NewName))
+		fmt.Fprintf(&script, "    export GIT_COMMITTER_NAME=%s\n", shell.QuoteSingle(cfg.NewName))
+	}
+	if cfg.NewEmail != "" {
+		fmt.Fprintf(&script, "    export GIT_AUTHOR_EMAIL=%s\n", shell.QuoteSingle(cfg.NewEmail))
+		fmt.Fprintf(&script, "    export GIT_COMMITTER_EMAIL=%s\n", shell.QuoteSingle(cfg.NewEmail))
+	}
+
+	if pyFilterPath != "" {
+		fmt.Fprintf(&script, "    msg=$(python3 %s)\n", shell.QuoteSingle(pyFilterPath))
+	} else {
+		script.WriteString("    msg=$(cat)\n")
+	}
+
+	switch cfg.SignMode {
+	case "ssh", "gpg":
+		script.WriteString("    echo \"$msg\" | git commit-tree -S \"$@\"\n")
+	default:
+		script.WriteString("    echo \"$msg\" | git commit-tree \"$@\"\n")
+	}
+
+	script.WriteString("else\n")
+	script.WriteString("    git commit-tree \"$@\"\n")
+	script.WriteString("fi\n")
+
+	if err := os.WriteFile(scriptPath, []byte(script.String()), 0755); err != nil {
+		return "", err
+	}
+	return scriptPath, nil
+}
+
+func generateUnifiedPythonMessageFilter(cfg *config.Config) (string, error) {
+	hasStrip := len(cfg.StripTitlePatterns) > 0 || len(cfg.StripBodyPatterns) > 0
+	hasCoauthor := cfg.CoauthorMode == "rewrite" || cfg.CoauthorMode == "remove"
+	if !hasStrip && !hasCoauthor {
+		return "", nil
+	}
+
+	targets := coauthor.ParseCoauthorTargets(cfg)
+	dataFile := filepath.Join(cfg.TempDir, "unified_msg.json")
+	data := map[string]any{
+		"strip_title":        cfg.StripTitlePatterns,
+		"strip_body":         cfg.StripBodyPatterns,
+		"coauthor_mode":      cfg.CoauthorMode,
+		"coauthor_targets":   targets,
+		"coauthor_new_name":  cfg.CoauthorNewName,
+		"coauthor_new_email": cfg.CoauthorNewEmail,
+	}
+	b, err := json.Marshal(data)
+	if err != nil {
+		return "", err
+	}
+	if err := os.WriteFile(dataFile, b, 0644); err != nil {
+		return "", err
+	}
+
+	pyScriptPath := filepath.Join(cfg.TempDir, "unified_msg.py")
+	pyContent := fmt.Sprintf(`import sys, re, json
+
+with open(%q, 'r', encoding='utf-8') as f:
+    cfg = json.load(f)
+
+raw = sys.stdin.read()
+parts = raw.split("\n", 1)
+title = parts[0]
+body = parts[1] if len(parts) > 1 else ""
+
+for p in (cfg.get('strip_title') or []):
+    title = re.sub(p, "", title)
+title = title.rstrip()
+
+for p in (cfg.get('strip_body') or []):
+    body = re.sub(p, "", body, flags=re.MULTILINE)
+
+mode = cfg.get('coauthor_mode', '')
+targets = cfg.get('coauthor_targets', [])
+if mode == 'remove':
+    for t in targets:
+        name = t.get('name') or ''
+        email = t.get('email') or ''
+        if name and email:
+            pat = r"(?m)^Co-authored-by:\s*" + re.escape(name) + r"\s*<" + re.escape(email) + r">(\r?\n)?"
+        elif email:
+            pat = r"(?m)^Co-authored-by:[^<\r\n]*<" + re.escape(email) + r">(\r?\n)?"
+        else:
+            pat = r"(?m)^Co-authored-by:\s*" + re.escape(name) + r"(\s*<[^>\r\n]*>)?(\r?\n)?"
+        body = re.sub(pat, "", body)
+elif mode == 'rewrite':
+    new_tr = "Co-authored-by: " + cfg.get('coauthor_new_name', '') + " <" + cfg.get('coauthor_new_email', '') + ">"
+    for t in targets:
+        name = t.get('name') or ''
+        email = t.get('email') or ''
+        if name and email:
+            pat = r"(?m)^Co-authored-by:\s*" + re.escape(name) + r"\s*<" + re.escape(email) + r">"
+        elif email:
+            pat = r"(?m)^Co-authored-by:[^<\r\n]*<" + re.escape(email) + r">"
+        else:
+            pat = r"(?m)^Co-authored-by:\s*" + re.escape(name) + r"(\s*<[^>\r\n]*>)?"
+        body = re.sub(pat, new_tr, body)
+
+body = re.sub(r"\n{3,}", "\n\n", body).strip("\r\n")
+if body:
+    sys.stdout.write(title + "\n\n" + body + "\n")
+else:
+    sys.stdout.write(title + "\n")
+`, dataFile)
+
+	if err := os.WriteFile(pyScriptPath, []byte(pyContent), 0755); err != nil {
+		return "", err
+	}
+	return pyScriptPath, nil
 }
 
 func RewriteCommitsInteractive(cfg *config.Config) error {
@@ -54,117 +307,6 @@ func RewriteCommitsInteractive(cfg *config.Config) error {
 	}
 
 	return rewriteInteractiveFilterRepo(cfg)
-}
-
-func rewriteBatchFilterRepo(cfg *config.Config) error {
-	log := cfg.Logger
-	args := []string{"git", "filter-repo", "--force"}
-
-	mailmapPath, err := generateMailmap(cfg)
-	if err != nil {
-		return err
-	}
-	if mailmapPath != "" {
-		args = append(args, "--mailmap", mailmapPath)
-	}
-
-	replaceMsgPath, err := generateReplaceMessage(cfg)
-	if err != nil {
-		return err
-	}
-	if replaceMsgPath != "" {
-		args = append(args, "--replace-message", replaceMsgPath)
-	}
-
-	if mailmapPath == "" && replaceMsgPath == "" {
-		args = append(args, "--proceed")
-	}
-
-	cmd := exec.Command(args[0], args[1:]...)
-	cmd.Dir = cfg.WorkDir()
-	if err := shell.RunCommand(cmd, "git-filter-repo batch"); err != nil {
-		return err
-	}
-	log.Success("Commit history rewritten successfully")
-	return nil
-}
-
-func generateMailmap(cfg *config.Config) (string, error) {
-	if cfg.NewEmail == "" && cfg.NewName == "" {
-		return "", nil
-	}
-
-	var lines []string
-	targetName := cfg.NewName
-	targetEmail := cfg.NewEmail
-
-	for _, raw := range cfg.OldRawAuthors {
-		name, email, _ := config.ParseAuthor(raw)
-		if name != "" && email != "" {
-			if targetName != "" {
-				lines = append(lines, fmt.Sprintf("%s <%s> %s <%s>", targetName, targetEmail, name, email))
-			} else {
-				lines = append(lines, fmt.Sprintf("<%s> %s <%s>", targetEmail, name, email))
-			}
-		}
-	}
-
-	for _, name := range cfg.OldNames {
-		if name == "" {
-			continue
-		}
-		if targetName != "" {
-			lines = append(lines, fmt.Sprintf("%s <%s> %s", targetName, targetEmail, name))
-		} else {
-			lines = append(lines, fmt.Sprintf("<%s> %s", targetEmail, name))
-		}
-	}
-
-	for _, email := range cfg.OldEmails {
-		if email == "" {
-			continue
-		}
-		if targetName != "" {
-			lines = append(lines, fmt.Sprintf("%s <%s> <%s>", targetName, targetEmail, email))
-		} else {
-			lines = append(lines, fmt.Sprintf("<%s> <%s>", targetEmail, email))
-		}
-	}
-
-	if len(lines) == 0 {
-		return "", nil
-	}
-
-	mailmapPath := filepath.Join(cfg.TempDir, "mailmap.txt")
-	content := strings.Join(lines, "\n") + "\n"
-	if err := os.WriteFile(mailmapPath, []byte(content), 0644); err != nil {
-		return "", err
-	}
-	return mailmapPath, nil
-}
-
-func generateReplaceMessage(cfg *config.Config) (string, error) {
-	var lines []string
-	for _, p := range cfg.StripTitlePatterns {
-		if strings.TrimSpace(p) != "" {
-			lines = append(lines, "regex:"+p+"==>")
-		}
-	}
-	for _, p := range cfg.StripBodyPatterns {
-		if strings.TrimSpace(p) != "" {
-			lines = append(lines, "regex:(?m)"+p+"(\\r?\\n)?==>")
-		}
-	}
-	if len(lines) == 0 {
-		return "", nil
-	}
-
-	path := filepath.Join(cfg.TempDir, "replace_message.txt")
-	content := strings.Join(lines, "\n") + "\n"
-	if err := os.WriteFile(path, []byte(content), 0644); err != nil {
-		return "", err
-	}
-	return path, nil
 }
 
 func rewriteInteractiveFilterRepo(cfg *config.Config) error {
