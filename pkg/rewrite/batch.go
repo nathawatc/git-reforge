@@ -103,11 +103,6 @@ func RewriteCommitsInteractive(cfg *config.Config) error {
 		return rewriteInteractiveFilterRepo(cfg)
 	}
 
-	msgFilterScript, err := generateMessageFilter(cfg)
-	if err != nil {
-		return err
-	}
-
 	args := []string{"git", "filter-branch", "-f"}
 
 	if len(cfg.State.CommitOverrides) > 0 {
@@ -119,6 +114,10 @@ func RewriteCommitsInteractive(cfg *config.Config) error {
 	}
 
 	if len(cfg.State.CommitMessages) > 0 {
+		msgFilterScript, err := generateMessageFilter(cfg)
+		if err != nil {
+			return err
+		}
 		args = append(args, "--msg-filter", ". "+shell.QuoteSingle(msgFilterScript))
 	}
 
@@ -166,25 +165,19 @@ func generateMessageFilter(cfg *config.Config) (string, error) {
 	scriptPath := filepath.Join(cfg.TempDir, "msg_filter.sh")
 
 	var script strings.Builder
-	script.WriteString("#!/usr/bin/env sh\n")
-
-	if len(cfg.State.CommitMessages) > 0 {
-		script.WriteString("case \"$GIT_COMMIT\" in\n")
-		for hash, msg := range cfg.State.CommitMessages {
-			if !strings.HasSuffix(msg, "\n") {
-				msg += "\n"
-			}
-			// Write message to sidecar file
-			msgFile := filepath.Join(cfg.TempDir, "msg_"+hash+".txt")
-			if err := os.WriteFile(msgFile, []byte(msg), 0644); err != nil {
-				return "", fmt.Errorf("failed to write message file: %w", err)
-			}
-			fmt.Fprintf(&script, "    %s)\n        cat %s\n        ;;\n", hash, shell.QuoteSingle(msgFile))
+	script.WriteString("#!/usr/bin/env sh\ncase \"$GIT_COMMIT\" in\n")
+	for hash, msg := range cfg.State.CommitMessages {
+		if !strings.HasSuffix(msg, "\n") {
+			msg += "\n"
 		}
-		script.WriteString("    *)\n        cat\n        ;;\nesac\n")
-	} else {
-		script.WriteString("cat\n")
+		// Write message to sidecar file
+		msgFile := filepath.Join(cfg.TempDir, "msg_"+hash+".txt")
+		if err := os.WriteFile(msgFile, []byte(msg), 0644); err != nil {
+			return "", fmt.Errorf("failed to write message file: %w", err)
+		}
+		fmt.Fprintf(&script, "    %s)\n        cat %s\n        ;;\n", hash, shell.QuoteSingle(msgFile))
 	}
+	script.WriteString("    *)\n        cat\n        ;;\nesac\n")
 
 	if err := os.WriteFile(scriptPath, []byte(script.String()), 0755); err != nil {
 		return "", fmt.Errorf("failed to write message filter script: %w", err)
