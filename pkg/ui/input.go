@@ -15,20 +15,10 @@ type PromptSession struct {
 }
 
 func NewPromptSession() *PromptSession {
-	tty, err := os.OpenFile("/dev/tty", os.O_RDWR, 0)
-	if err == nil {
-		return newPromptSession(tty, tty, tty)
+	if tty, err := os.OpenFile("/dev/tty", os.O_RDWR, 0); err == nil {
+		return &PromptSession{reader: bufio.NewReader(tty), output: tty, file: tty}
 	}
-
-	return newPromptSession(os.Stdin, os.Stdout, nil)
-}
-
-func newPromptSession(input io.Reader, output io.Writer, file *os.File) *PromptSession {
-	return &PromptSession{
-		reader: bufio.NewReader(input),
-		output: output,
-		file:   file,
-	}
+	return &PromptSession{reader: bufio.NewReader(os.Stdin), output: os.Stdout}
 }
 
 func (p *PromptSession) Close() error {

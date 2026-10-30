@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"bufio"
 	"bytes"
 	"errors"
 	"io"
@@ -10,7 +11,7 @@ import (
 
 func TestPromptSessionReadLineTrimsInputAndWritesPrompt(t *testing.T) {
 	var output bytes.Buffer
-	prompts := newPromptSession(strings.NewReader("  yes  \n"), &output, nil)
+	prompts := &PromptSession{reader: bufio.NewReader(strings.NewReader("  yes  \n")), output: &output}
 
 	got, err := prompts.ReadLine("Proceed? ")
 	if err != nil {
@@ -27,7 +28,7 @@ func TestPromptSessionReadLineTrimsInputAndWritesPrompt(t *testing.T) {
 
 func TestPromptSessionReadLineReturnsErrorOnEOF(t *testing.T) {
 	var output bytes.Buffer
-	prompts := newPromptSession(strings.NewReader(""), &output, nil)
+	prompts := &PromptSession{reader: bufio.NewReader(strings.NewReader("")), output: &output}
 
 	got, err := prompts.ReadLine("Choice: ")
 	if err == nil {
