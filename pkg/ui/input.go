@@ -14,6 +14,13 @@ type PromptSession struct {
 	file   *os.File
 }
 
+func isCharDevice(f *os.File) bool {
+	if fi, err := f.Stat(); err == nil {
+		return (fi.Mode() & os.ModeCharDevice) != 0
+	}
+	return false
+}
+
 func NewPromptSession() *PromptSession {
 	if tty, err := os.OpenFile("/dev/tty", os.O_RDWR, 0); err == nil {
 		return &PromptSession{reader: bufio.NewReader(tty), output: tty, file: tty}
@@ -22,7 +29,7 @@ func NewPromptSession() *PromptSession {
 }
 
 func (p *PromptSession) HasTTY() bool {
-	return p.file != nil
+	return p.file != nil || isCharDevice(os.Stdin)
 }
 
 func (p *PromptSession) Printf(format string, a ...any) (int, error) {
@@ -45,6 +52,9 @@ func (p *PromptSession) ReadLine(prompt string) (string, error) {
 	}
 	input, err := p.reader.ReadString('\n')
 	if err != nil {
+		if err == io.EOF && len(input) > 0 {
+			return strings.TrimSpace(input), nil
+		}
 		return "", fmt.Errorf("failed to read input: %w", err)
 	}
 	return strings.TrimSpace(input), nil

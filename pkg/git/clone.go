@@ -3,7 +3,6 @@ package git
 import (
 	"fmt"
 	"io"
-	"maps"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -56,30 +55,37 @@ func Clone(cfg *config.Config) error {
 }
 
 type CommitInfo struct {
-	Hash        string
-	AuthorName  string
-	AuthorEmail string
-	AuthorDate  string
-	Subject     string
-	Body        string
+	Hash           string
+	AuthorName     string
+	AuthorEmail    string
+	CommitterName  string
+	CommitterEmail string
+	AuthorDate     string
+	Subject        string
+	Body           string
 }
 
 // CommitDetails extracts metadata for a single commit
 func CommitDetails(workDir string, hash string) (CommitInfo, error) {
-	cmd := exec.Command("git", "log", "-1", "--format=%an%x00%ae%x00%ai%x00%s%x00%B", hash)
+	cmd := exec.Command("git", "log", "-1", "--format=%an%x00%ae%x00%cn%x00%ce%x00%ai%x00%s%x00%B", hash)
 	cmd.Dir = workDir
-	output, err := cmd.Output()
+	output, err := cmd.CombinedOutput()
 	if err != nil {
-		return CommitInfo{Hash: hash}, fmt.Errorf("git log failed for commit %s: %w", hash, err)
+		return CommitInfo{Hash: hash}, fmt.Errorf("git log failed for commit %s: %s: %w", hash, strings.TrimSpace(string(output)), err)
 	}
-	parts := strings.SplitN(string(output), "\x00", 5)
-	info := CommitInfo{Hash: hash}
-	if len(parts) >= 5 {
-		info.AuthorName = strings.TrimSpace(parts[0])
-		info.AuthorEmail = strings.TrimSpace(parts[1])
-		info.AuthorDate = strings.TrimSpace(parts[2])
-		info.Subject = strings.TrimSpace(parts[3])
-		info.Body = parts[4]
+	parts := strings.SplitN(string(output), "\x00", 7)
+	if len(parts) < 7 {
+		return CommitInfo{Hash: hash}, fmt.Errorf("malformed commit metadata for %s", hash)
+	}
+	info := CommitInfo{
+		Hash:           hash,
+		AuthorName:     strings.TrimSpace(parts[0]),
+		AuthorEmail:    strings.TrimSpace(parts[1]),
+		CommitterName:  strings.TrimSpace(parts[2]),
+		CommitterEmail: strings.TrimSpace(parts[3]),
+		AuthorDate:     strings.TrimSpace(parts[4]),
+		Subject:        strings.TrimSpace(parts[5]),
+		Body:           parts[6],
 	}
 	return info, nil
 }
@@ -229,40 +235,19 @@ func pushTags(workDir string) error {
 }
 
 func branchRefspecs(workDir string) ([]string, error) {
-	refspecsByBranch := make(map[string]string)
-
-	remoteRefs, err := listRefs(workDir, "refs/remotes/origin")
-	if err != nil {
-		return nil, err
-	}
-	for _, ref := range remoteRefs {
-		if ref == "refs/remotes/origin/HEAD" {
-			continue
-		}
-		branchName := strings.TrimPrefix(ref, "refs/remotes/origin/")
-		if branchName == "" || branchName == ref {
-			continue
-		}
-		refspecsByBranch[branchName] = ref + ":refs/heads/" + branchName
-	}
-
 	localRefs, err := listRefs(workDir, "refs/heads")
 	if err != nil {
 		return nil, err
 	}
+	slices.Sort(localRefs)
+
+	var refspecs []string
 	for _, ref := range localRefs {
 		branchName := strings.TrimPrefix(ref, "refs/heads/")
 		if branchName == "" || branchName == ref {
 			continue
 		}
-		refspecsByBranch[branchName] = ref + ":refs/heads/" + branchName
-	}
-
-	branchNames := slices.Sorted(maps.Keys(refspecsByBranch))
-
-	var refspecs []string
-	for _, branchName := range branchNames {
-		refspecs = append(refspecs, refspecsByBranch[branchName])
+		refspecs = append(refspecs, ref+":refs/heads/"+branchName)
 	}
 	return refspecs, nil
 }
@@ -288,8 +273,10 @@ func listRefs(workDir string, namespace string) ([]string, error) {
 // Save copies the working repository to saveDir
 func Save(sourceDir string, saveDir string) error {
 	workDir := sourceDir
-	if fi, err := os.Stat(filepath.Join(sourceDir, "working")); err == nil && fi.IsDir() {
-		workDir = filepath.Join(sourceDir, "working")
+	if _, err := os.Stat(filepath.Join(sourceDir, ".git")); os.IsNotExist(err) {
+		if fi, err := os.Stat(filepath.Join(sourceDir, "working")); err == nil && fi.IsDir() {
+			workDir = filepath.Join(sourceDir, "working")
+		}
 	}
 	if err := PruneOriginalRefs(workDir); err != nil {
 		return err
@@ -346,7 +333,7 @@ func copyDirRecursive(src, dst string) error {
 				path string
 				mode os.FileMode
 			}{path: dstPath, mode: info.Mode().Perm()})
-		} else {
+		} else if info.Mode().IsRegular() {
 			if err := os.MkdirAll(filepath.Dir(dstPath), 0755); err != nil {
 				return err
 			}
@@ -361,8 +348,8 @@ func copyDirRecursive(src, dst string) error {
 	}
 
 	// Apply final directory permissions in reverse order (children before parents)
-	for i := len(dirModes) - 1; i >= 0; i-- {
-		if err := os.Chmod(dirModes[i].path, dirModes[i].mode); err != nil {
+	for _, dm := range slices.Backward(dirModes) {
+		if err := os.Chmod(dm.path, dm.mode); err != nil {
 			return err
 		}
 	}

@@ -33,7 +33,7 @@ func RewriteBatch(cfg *config.Config) error {
 
 	log.Info("Applying Co-authored-by " + cfg.CoauthorMode + " to all commits...")
 	cmd := exec.Command("git", "filter-branch", "-f",
-		"--msg-filter", "bash "+shell.QuoteSingle(coauthorMsgFilter),
+		"--msg-filter", "sh "+shell.QuoteSingle(coauthorMsgFilter),
 		"--tag-name-filter", "cat", "--", "--all")
 	cmd.Dir = cfg.WorkDir()
 	if err := shell.RunCommand(cmd, "filter-branch"); err != nil {
@@ -66,7 +66,7 @@ func RewriteInteractive(cfg *config.Config) error {
 
 	log.Info(fmt.Sprintf("Applying %d Co-authored-by decision(s)...", len(cfg.State.CoauthorActions)))
 	cmd := exec.Command("git", "filter-branch", "-f",
-		"--msg-filter", "bash "+shell.QuoteSingle(coauthorMsgFilter),
+		"--msg-filter", "sh "+shell.QuoteSingle(coauthorMsgFilter),
 		"--tag-name-filter", "cat", "--", "--all")
 	cmd.Dir = cfg.WorkDir()
 	if err := shell.RunCommand(cmd, "filter-branch"); err != nil {
@@ -86,10 +86,13 @@ func parseCoauthorTargets(cfg *config.Config) []coauthorTarget {
 	var targets []coauthorTarget
 	from := cfg.CoauthorFrom
 	if len(from) == 0 {
-		if len(cfg.OldRawAuthors) > 0 {
+		switch {
+		case len(cfg.OldRawAuthors) > 0:
 			from = cfg.OldRawAuthors
-		} else {
+		case len(cfg.OldNames) > 0:
 			from = cfg.OldNames
+		default:
+			from = cfg.OldEmails
 		}
 	}
 	for _, raw := range from {
@@ -121,9 +124,9 @@ func buildSedCommands(targets []coauthorTarget, mode string, newTrailer string) 
 	for _, t := range targets {
 		pattern := sedPatternForTarget(t)
 		if mode == "remove" {
-			cmds = append(cmds, fmt.Sprintf("-e %s", shell.QuoteSingle(fmt.Sprintf("/^%s$/d", pattern))))
+			cmds = append(cmds, fmt.Sprintf("-e %s", shell.QuoteSingle(fmt.Sprintf("/^%s\\r?$/d", pattern))))
 		} else {
-			cmds = append(cmds, fmt.Sprintf("-e %s", shell.QuoteSingle(fmt.Sprintf("s/^%s$/%s/", pattern, newTrailer))))
+			cmds = append(cmds, fmt.Sprintf("-e %s", shell.QuoteSingle(fmt.Sprintf("s/^%s\\r?$/%s/", pattern, newTrailer))))
 		}
 	}
 	return strings.Join(cmds, " ")
@@ -179,7 +182,7 @@ func rewriteBatchFilterRepo(cfg *config.Config) error {
 	log := cfg.Logger
 	targets := parseCoauthorTargets(cfg)
 	dataFile := filepath.Join(cfg.TempDir, "filter_coauthor_batch.json")
-	data := map[string]interface{}{
+	data := map[string]any{
 		"targets":   targets,
 		"new_name":  cfg.CoauthorNewName,
 		"new_email": cfg.CoauthorNewEmail,
@@ -205,11 +208,11 @@ mode = cfg.get('mode', '')
 patterns = []
 for t in targets:
     if t.get('name') and t.get('email'):
-        patterns.append(r"(?m)^Co-authored-by: " + re.escape(t['name']) + r" <" + re.escape(t['email']) + r">$\n?")
+        patterns.append(r"(?m)^Co-authored-by: " + re.escape(t['name']) + r" <" + re.escape(t['email']) + r">\r?$\n?")
     elif t.get('email'):
-        patterns.append(r"(?m)^Co-authored-by: [^<]*<" + re.escape(t['email']) + r">$\n?")
+        patterns.append(r"(?m)^Co-authored-by: [^<\r\n]*<" + re.escape(t['email']) + r">\r?$\n?")
     else:
-        patterns.append(r"(?m)^Co-authored-by: " + re.escape(t['name']) + r" <[^>]*>$\n?")
+        patterns.append(r"(?m)^Co-authored-by: " + re.escape(t['name']) + r" <[^>\r\n]*>\r?$\n?")
 
 if mode == "remove":
     for p in patterns:
@@ -235,7 +238,7 @@ func rewriteInteractiveFilterRepo(cfg *config.Config) error {
 	log := cfg.Logger
 	targets := parseCoauthorTargets(cfg)
 	dataFile := filepath.Join(cfg.TempDir, "filter_coauthor_interactive.json")
-	data := map[string]interface{}{
+	data := map[string]any{
 		"actions":   cfg.State.CoauthorActions,
 		"targets":   targets,
 		"new_name":  cfg.CoauthorNewName,
@@ -261,11 +264,11 @@ new_email = cfg.get('new_email', '')
 patterns = []
 for t in targets:
     if t.get('name') and t.get('email'):
-        patterns.append(r"(?m)^Co-authored-by: " + re.escape(t['name']) + r" <" + re.escape(t['email']) + r">$\n?")
+        patterns.append(r"(?m)^Co-authored-by: " + re.escape(t['name']) + r" <" + re.escape(t['email']) + r">\r?$\n?")
     elif t.get('email'):
-        patterns.append(r"(?m)^Co-authored-by: [^<]*<" + re.escape(t['email']) + r">$\n?")
+        patterns.append(r"(?m)^Co-authored-by: [^<\r\n]*<" + re.escape(t['email']) + r">\r?$\n?")
     else:
-        patterns.append(r"(?m)^Co-authored-by: " + re.escape(t['name']) + r" <[^>]*>$\n?")
+        patterns.append(r"(?m)^Co-authored-by: " + re.escape(t['name']) + r" <[^>\r\n]*>\r?$\n?")
 
 replacement = ("Co-authored-by: " + new_name + " <" + new_email + ">\n").encode('utf-8')
 
@@ -320,19 +323,23 @@ func InteractiveCoauthorEdit(cfg *config.Config) {
 	log.Info("Scanning all commits for matching Co-authored-by trailers...")
 
 	var matchingCommits []string
+	commitDetailsCache := make(map[string]git.CommitInfo)
 	seen := make(map[string]bool)
 
 	for _, t := range targets {
-		pattern := "Co-authored-by: " + t.Name
-		if t.Email != "" {
-			pattern += " <" + t.Email + ">"
-		} else {
-			pattern += " "
+		var pattern string
+		switch {
+		case t.Name != "" && t.Email != "":
+			pattern = "Co-authored-by: " + t.Name + " <" + t.Email + ">"
+		case t.Email != "":
+			pattern = "<" + t.Email + ">"
+		default:
+			pattern = "Co-authored-by: " + t.Name
 		}
 
 		cmd := exec.Command("git", "log", "--all", "-F", "--grep="+pattern, "--format=%H")
 		cmd.Dir = cfg.WorkDir()
-		output, err := cmd.Output()
+		output, err := cmd.CombinedOutput()
 		if err != nil {
 			continue
 		}
@@ -345,6 +352,7 @@ func InteractiveCoauthorEdit(cfg *config.Config) {
 			info, err := git.CommitDetails(cfg.WorkDir(), commitHash)
 			if err == nil && matchesAnyCoauthor(info.Body, targets) {
 				matchingCommits = append(matchingCommits, commitHash)
+				commitDetailsCache[commitHash] = info
 				seen[commitHash] = true
 			}
 		}
@@ -368,7 +376,7 @@ func InteractiveCoauthorEdit(cfg *config.Config) {
 	current := 0
 	for _, commitHash := range matchingCommits {
 		current++
-		info, _ := git.CommitDetails(cfg.WorkDir(), commitHash)
+		info := commitDetailsCache[commitHash]
 		matchingLines := extractMatchingLinesForTargets(info.Body, targets)
 
 		fmt.Printf("%s────────────────────────────────────────────────────────────────%s\n", ui.Bold, ui.NC)
@@ -398,22 +406,11 @@ func InteractiveCoauthorEdit(cfg *config.Config) {
 }
 
 func matchesCoauthor(body string, name string, email string) bool {
-	if name != "" && email != "" {
-		return strings.Contains(body, "Co-authored-by: "+name+" <"+email+">")
-	}
-	if email != "" {
-		return strings.Contains(body, "<"+email+">") && strings.Contains(body, "Co-authored-by:")
-	}
-	return strings.Contains(body, "Co-authored-by: "+name)
+	return len(extractMatchingLinesForTargets(body, []coauthorTarget{{Name: name, Email: email}})) > 0
 }
 
 func matchesAnyCoauthor(body string, targets []coauthorTarget) bool {
-	for _, t := range targets {
-		if matchesCoauthor(body, t.Name, t.Email) {
-			return true
-		}
-	}
-	return false
+	return len(extractMatchingLinesForTargets(body, targets)) > 0
 }
 
 func extractMatchingLinesForTargets(body string, targets []coauthorTarget) []string {
@@ -423,21 +420,18 @@ func extractMatchingLinesForTargets(body string, targets []coauthorTarget) []str
 			continue
 		}
 		for _, t := range targets {
-			if t.Name != "" && t.Email != "" {
-				if strings.Contains(line, "Co-authored-by: "+t.Name+" <"+t.Email+">") {
-					matches = append(matches, line)
-					break
-				}
-			} else if t.Email != "" {
-				if strings.Contains(line, "<"+t.Email+">") {
-					matches = append(matches, line)
-					break
-				}
-			} else {
-				if strings.HasPrefix(line, "Co-authored-by: "+t.Name+" ") || line == "Co-authored-by: "+t.Name {
-					matches = append(matches, line)
-					break
-				}
+			var matched bool
+			switch {
+			case t.Name != "" && t.Email != "":
+				matched = strings.Contains(line, "Co-authored-by: "+t.Name+" <"+t.Email+">")
+			case t.Email != "":
+				matched = strings.Contains(line, "<"+t.Email+">")
+			default:
+				matched = strings.HasPrefix(line, "Co-authored-by: "+t.Name+" <") || line == "Co-authored-by: "+t.Name
+			}
+			if matched {
+				matches = append(matches, line)
+				break
 			}
 		}
 	}

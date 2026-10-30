@@ -55,7 +55,7 @@ pkg/
 	rewrite/
 		batch.go        # RewriteCommitsBatch, RewriteCommitsInteractive (filter-repo & filter-branch engines)
 	shell/
-		escape.go       # RunCommand (captures stderr), HasFilterRepo, QuoteSingle, EscapeSed, EscapeDoubleQuoted
+		escape.go       # RunCommand (captures stderr), HasFilterRepo, QuoteSingle, EscapeSed
 	signing/
 		commit.go       # HandleSigning (keep/none/gpg/ssh), ResignTags, tagger metadata preservation
 	logging/

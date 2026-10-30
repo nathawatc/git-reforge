@@ -25,5 +25,7 @@ func TestDisplayConfigSkipsPromptWhenYesIsTrue(t *testing.T) {
 	cfg.Logger = dummyLogger{}
 
 	// Must return immediately without calling os.Exit or blocking on prompt
-	DisplayConfig(cfg)
+	if err := DisplayConfig(cfg); err != nil {
+		t.Fatalf("DisplayConfig() error = %v, want nil", err)
+	}
 }
