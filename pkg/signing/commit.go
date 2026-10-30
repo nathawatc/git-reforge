@@ -35,7 +35,7 @@ func handleNone(cfg *config.Config) error {
 	log.Header("Removing Signatures")
 	log.Info("Stripping all commit signatures...")
 
-	cmd := exec.Command("git", "filter-repo", "--force", "--commit-callback", "pass")
+	cmd := exec.Command("git", "filter-repo", "--force", "--proceed")
 	cmd.Dir = cfg.WorkDir()
 	if err := shell.RunCommand(cmd, "git-filter-repo strip signatures"); err != nil {
 		return err
