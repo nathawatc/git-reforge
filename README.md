@@ -70,6 +70,8 @@ go build .
 | `--gpg <keyid>`     | Re-sign commits and tags with GPG key ID                   |
 | `--ssh <path>`      | Re-sign commits and tags with SSH private key path         |
 | `--no-sign`         | Strip all commit and tag signatures                        |
+| `--strip-title <p>` | Regex to strip from commit title (repeatable)              |
+| `--strip-body <p>`  | Regex to strip from commit body (repeatable)               |
 | `--save-dir <path>` | Save rewritten repo to `<path>` (directory must not exist) |
 | `--no-push`         | Rewrite history locally but skip pushing to destination    |
 | `-y, --yes`         | Skip confirmation prompt for non-interactive / CI runs     |
@@ -77,11 +79,11 @@ go build .
 
 ### Co-Authored-by Options
 
-| Option                    | Description                                                                    |
-| ------------------------- | ------------------------------------------------------------------------------ |
-| `-c, --coauthor <mode>`   | Trailer mode: `rewrite\|remove\|interactive`                                   |
-| `--coauthor-from <names>` | Co-author name(s) or `"Name <email>"` to match (repeatable; default: `--from`) |
-| `--coauthor-to <author>`  | Replacement identity (`"Name <email>"` or `"email"`; default: `--to`)          |
+| Option                   | Description                                                |
+| ------------------------ | ---------------------------------------------------------- |
+| `-c, --coauthor <mode>`  | Trailer mode: `rewrite\|remove\|interactive`               |
+| `--coauthor-from <n>`    | Co-author name(s) to match (repeatable; default: `--from`) |
+| `--coauthor-to <author>` | Replacement identity (`"Name <email>"`; default: `--to`)   |
 
 ### Examples
 

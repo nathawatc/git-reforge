@@ -95,18 +95,21 @@ pkg/
 
 ### History Rewriting Engine (`pkg/rewrite`, `pkg/coauthor`, `pkg/signing`)
 
-- **git-filter-repo engine**: The pipeline requires `git-filter-repo` as a prerequisite dependency.
-  - History rewriting executes via Python callbacks (`--commit-callback`) with sidecar JSON
-    configuration files written to `$TEMP_DIR`.
-  - Avoids shell quoting overhead, variable expansion bugs, and command substitution newline
-    stripping.
+- **Unified Scoped Filter**: History rewriting executes via an author-scoped single-pass filter.
+  - Commits matching migrating author identities have their author, committer, message, trailers,
+    and signatures rewritten and signed.
+  - Untouched ancestor commits from other authors emit `$GIT_COMMIT` directly, preserving original
+    commit hashes, messages, and cryptographic signatures intact.
+  - Interactive mode uses `git-filter-repo` commit callbacks with sidecar JSON files.
 
 ### Git Commit Metadata SSOT (`pkg/git/clone.go`)
 
-- `git.CommitDetails(workDir, hash) (CommitInfo, error)` is the **Single Source of Truth** for extracting
-  commit metadata (`AuthorName`, `AuthorEmail`, `AuthorDate`, `Subject`, `Body`).
-- Uses a single formatted `git log -1 --format=%an%x00%ae%x00%ai%x00%s%x00%B` invocation. Other packages
-  must call `git.CommitDetails` rather than spawning ad-hoc `git log` subcommands.
+- `git.CommitDetails(workDir, hash) (CommitInfo, error)` is the **Single Source of Truth**
+  for extracting commit metadata (`AuthorName`, `AuthorEmail`, `CommitterName`, `CommitterEmail`,
+  `AuthorDate`, `Subject`, `Body`).
+- Uses a single formatted `git log -1 --format=%an%x00%ae%x00%cn%x00%ce%x00%ai%x00%s%x00%B`
+  invocation. Other packages must call `git.CommitDetails` rather than spawning ad-hoc `git log`
+  subcommands.
 
 ### Interactive State (`pkg/config/config.go`)
 
