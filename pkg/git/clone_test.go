@@ -307,6 +307,33 @@ func TestSaveHandlesReadOnlyDirectories(t *testing.T) {
 	}
 }
 
+func TestSaveWhenRepoContainsWorkingSubdirectory(t *testing.T) {
+	tmpDir := t.TempDir()
+	repoDir := filepath.Join(tmpDir, "working")
+	if err := os.Mkdir(repoDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	runGit(t, repoDir, "init")
+	subWorking := filepath.Join(repoDir, "working")
+	if err := os.Mkdir(subWorking, 0755); err != nil {
+		t.Fatal(err)
+	}
+	writeFile(t, filepath.Join(subWorking, "inner.txt"), "inner\n")
+	writeFile(t, filepath.Join(repoDir, "root.txt"), "root\n")
+
+	saveDir := filepath.Join(tmpDir, "saved")
+	if err := Save(repoDir, saveDir); err != nil {
+		t.Fatalf("Save() error = %v", err)
+	}
+
+	if _, err := os.Stat(filepath.Join(saveDir, "root.txt")); err != nil {
+		t.Errorf("Save() missed root.txt: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(saveDir, ".git")); err != nil {
+		t.Errorf("Save() missed .git: %v", err)
+	}
+}
+
 func TestPruneOriginalRefsRemovesBackupRefs(t *testing.T) {
 	if _, err := exec.LookPath("git"); err != nil {
 		t.Skip("git not available")
@@ -447,6 +474,12 @@ func TestCommitDetailsExtractsAllFields(t *testing.T) {
 	}
 	if info.AuthorEmail != "author@example.org" {
 		t.Errorf("AuthorEmail = %q want 'author@example.org'", info.AuthorEmail)
+	}
+	if info.CommitterName != "Commit Author" {
+		t.Errorf("CommitterName = %q want 'Commit Author'", info.CommitterName)
+	}
+	if info.CommitterEmail != "author@example.org" {
+		t.Errorf("CommitterEmail = %q want 'author@example.org'", info.CommitterEmail)
 	}
 	if info.Subject != "Subject Line" {
 		t.Errorf("Subject = %q want 'Subject Line'", info.Subject)
