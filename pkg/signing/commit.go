@@ -179,53 +179,61 @@ func ResignTags(cfg *config.Config) error {
 
 	log.Info(fmt.Sprintf("Processing %d annotated tag(s)...", len(annotatedTags)))
 
-	switch cfg.SignMode {
-	case "none":
-		log.Info("Stripping signatures from annotated tags...")
-		var failures []error
-		for _, tag := range annotatedTags {
-			if err := stripTag(cfg, tag); err != nil {
-				log.Warning("Failed to strip tag: " + tag)
-				failures = append(failures, fmt.Errorf("failed to strip tag %s: %w", tag, err))
-				continue
-			}
-			log.Info("  Stripped signature from tag: " + tag)
-		}
-		if err := errors.Join(failures...); err != nil {
-			return err
-		}
-		log.Success("Tag signatures removed")
-	case "gpg":
-		log.Info("Re-signing annotated tags with GPG key: " + cfg.GPGKey + "...")
-		var failures []error
-		for _, tag := range annotatedTags {
-			if err := resignTagGPG(cfg, tag); err != nil {
-				log.Warning("Failed to re-sign tag: " + tag)
-				failures = append(failures, fmt.Errorf("failed to re-sign GPG tag %s: %w", tag, err))
-				continue
-			}
-			log.Info("  Re-signed tag: " + tag)
-		}
-		if err := errors.Join(failures...); err != nil {
-			return err
-		}
-		log.Success("Tags re-signed with GPG")
-	case "ssh":
-		log.Info("Re-signing annotated tags with SSH key: " + cfg.SSHKey + "...")
-		var failures []error
-		for _, tag := range annotatedTags {
-			if err := resignTagSSH(cfg, tag); err != nil {
-				log.Warning("Failed to re-sign tag: " + tag)
-				failures = append(failures, fmt.Errorf("failed to re-sign SSH tag %s: %w", tag, err))
-				continue
-			}
-			log.Info("  Re-signed tag: " + tag)
-		}
-		if err := errors.Join(failures...); err != nil {
-			return err
-		}
-		log.Success("Tags re-signed with SSH")
+	type tagOp struct {
+		startMsg   string
+		action     string
+		failFormat string
+		doneMsg    string
+		successMsg string
+		fn         func(*config.Config, string) error
 	}
+
+	ops := map[string]tagOp{
+		"none": {
+			startMsg:   "Stripping signatures from annotated tags...",
+			action:     "strip tag",
+			failFormat: "failed to strip tag %s: %w",
+			doneMsg:    "  Stripped signature from tag: ",
+			successMsg: "Tag signatures removed",
+			fn:         stripTag,
+		},
+		"gpg": {
+			startMsg:   "Re-signing annotated tags with GPG key: " + cfg.GPGKey + "...",
+			action:     "re-sign tag",
+			failFormat: "failed to re-sign GPG tag %s: %w",
+			doneMsg:    "  Re-signed tag: ",
+			successMsg: "Tags re-signed with GPG",
+			fn:         resignTagGPG,
+		},
+		"ssh": {
+			startMsg:   "Re-signing annotated tags with SSH key: " + cfg.SSHKey + "...",
+			action:     "re-sign tag",
+			failFormat: "failed to re-sign SSH tag %s: %w",
+			doneMsg:    "  Re-signed tag: ",
+			successMsg: "Tags re-signed with SSH",
+			fn:         resignTagSSH,
+		},
+	}
+
+	op, ok := ops[cfg.SignMode]
+	if !ok {
+		return nil
+	}
+
+	log.Info(op.startMsg)
+	var failures []error
+	for _, tag := range annotatedTags {
+		if err := op.fn(cfg, tag); err != nil {
+			log.Warning("Failed to " + op.action + ": " + tag)
+			failures = append(failures, fmt.Errorf(op.failFormat, tag, err))
+			continue
+		}
+		log.Info(op.doneMsg + tag)
+	}
+	if err := errors.Join(failures...); err != nil {
+		return err
+	}
+	log.Success(op.successMsg)
 
 	return nil
 }
@@ -310,7 +318,7 @@ func taggerEnv(cfg *config.Config, info taggerInfo) []string {
 	return env
 }
 
-func stripTag(cfg *config.Config, tagName string) error {
+func recreateTag(cfg *config.Config, tagName string, desc string, prefixArgs []string, tagFlags ...string) error {
 	msg, err := getTagRecreateMessage(cfg.TempDir, tagName)
 	if err != nil {
 		return err
@@ -324,62 +332,29 @@ func stripTag(cfg *config.Config, tagName string) error {
 		return err
 	}
 
-	cmd := exec.Command("git", "tag", "-f", "-a", tagName, tagCommit, "-m", msg)
+	args := append([]string{}, prefixArgs...)
+	args = append(args, "tag", "-f")
+	args = append(args, tagFlags...)
+	args = append(args, tagName, tagCommit, "-m", msg)
+
+	cmd := exec.Command("git", args...)
 	cmd.Dir = cfg.WorkDir()
 	cmd.Env = taggerEnv(cfg, tagger)
-	if err := shell.RunCommand(cmd, "git tag strip"); err != nil {
-		return err
-	}
-	return nil
+	return shell.RunCommand(cmd, desc)
+}
+
+func stripTag(cfg *config.Config, tagName string) error {
+	return recreateTag(cfg, tagName, "git tag strip", nil, "-a")
 }
 
 func resignTagGPG(cfg *config.Config, tagName string) error {
-	msg, err := getTagRecreateMessage(cfg.TempDir, tagName)
-	if err != nil {
-		return err
-	}
-	tagCommit, err := getTagCommit(cfg.TempDir, tagName)
-	if err != nil {
-		return err
-	}
-	tagger, err := getTagTagger(cfg.TempDir, tagName)
-	if err != nil {
-		return err
-	}
-
-	cmd := exec.Command("git",
-		"-c", "gpg.format=openpgp",
-		"tag", "-f", "-s", tagName, "-u", cfg.GPGKey, tagCommit, "-m", msg)
-	cmd.Dir = cfg.WorkDir()
-	cmd.Env = taggerEnv(cfg, tagger)
-	if err := shell.RunCommand(cmd, "git tag resign GPG"); err != nil {
-		return err
-	}
-	return nil
+	return recreateTag(cfg, tagName, "git tag resign GPG",
+		[]string{"-c", "gpg.format=openpgp"},
+		"-s", "-u", cfg.GPGKey)
 }
 
 func resignTagSSH(cfg *config.Config, tagName string) error {
-	msg, err := getTagRecreateMessage(cfg.TempDir, tagName)
-	if err != nil {
-		return err
-	}
-	tagCommit, err := getTagCommit(cfg.TempDir, tagName)
-	if err != nil {
-		return err
-	}
-	tagger, err := getTagTagger(cfg.TempDir, tagName)
-	if err != nil {
-		return err
-	}
-
-	cmd := exec.Command("git",
-		"-c", "gpg.format=ssh",
-		"-c", "user.signingkey="+cfg.SSHKey,
-		"tag", "-f", "-s", tagName, tagCommit, "-m", msg)
-	cmd.Dir = cfg.WorkDir()
-	cmd.Env = taggerEnv(cfg, tagger)
-	if err := shell.RunCommand(cmd, "git tag resign SSH"); err != nil {
-		return err
-	}
-	return nil
+	return recreateTag(cfg, tagName, "git tag resign SSH",
+		[]string{"-c", "gpg.format=ssh", "-c", "user.signingkey=" + cfg.SSHKey},
+		"-s")
 }
