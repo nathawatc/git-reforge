@@ -27,18 +27,19 @@ func Run(cfg *config.Config) (retErr error) {
 		if err := rewrite.RewriteCommitsInteractive(cfg); err != nil {
 			return err
 		}
+		if err := coauthor.RunCoauthorPhase(cfg); err != nil {
+			return err
+		}
+		if err := signing.HandleSigning(cfg); err != nil {
+			return err
+		}
 	} else {
 		if err := rewrite.RewriteCommitsBatch(cfg); err != nil {
 			return err
 		}
-	}
-
-	if err := coauthor.RunCoauthorPhase(cfg); err != nil {
-		return err
-	}
-
-	if err := signing.HandleSigning(cfg); err != nil {
-		return err
+		if err := signing.ResignTags(cfg); err != nil {
+			return err
+		}
 	}
 
 	if err := git.PruneOriginalRefs(cfg.WorkDir()); err != nil {

@@ -104,6 +104,124 @@ func TestNonInteractiveMigrationPipelineLocalRepos(t *testing.T) {
 	}
 }
 
+func TestForkMigrationPreservesUpstreamCommitsAndSignatures(t *testing.T) {
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skip("git not available")
+	}
+	if _, err := exec.LookPath("ssh-keygen"); err != nil {
+		t.Skip("ssh-keygen not available")
+	}
+
+	root := t.TempDir()
+	sourceDir := filepath.Join(root, "source.git")
+	destDir := filepath.Join(root, "dest.git")
+	seedDir := filepath.Join(root, "seed")
+	boltKey := filepath.Join(root, "bolt_key")
+	scottKey := filepath.Join(root, "scott_key")
+
+	runCmd(t, root, "ssh-keygen", "-q", "-t", "ed25519", "-N", "", "-f", boltKey)
+	runCmd(t, root, "ssh-keygen", "-q", "-t", "ed25519", "-N", "", "-f", scottKey)
+
+	runGit(t, root, "init", "--bare", sourceDir)
+	runGit(t, root, "init", "--bare", destDir)
+	runGit(t, root, "clone", sourceDir, seedDir)
+
+	// Upstream commit by boltgolt (signed, with PR # and Reviewed-on)
+	runGit(t, seedDir, "config", "gpg.format", "ssh")
+	runGit(t, seedDir, "config", "user.name", "boltgolt")
+	runGit(t, seedDir, "config", "user.email", "boltgolt@gmail.com")
+	runGit(t, seedDir, "config", "user.signingkey", boltKey)
+	runGit(t, seedDir, "config", "commit.gpgsign", "true")
+
+	writeFile(t, filepath.Join(seedDir, "bolt.txt"), "upstream\n")
+	runGit(t, seedDir, "add", "bolt.txt")
+	runGit(t, seedDir, "commit", "-m", "upstream commit (#10)\n\nReviewed-on: https://github.com/boltgolt/howdy/pull/10\n")
+	origBoltSHA := strings.TrimSpace(runGitOutput(t, seedDir, "rev-parse", "HEAD"))
+
+	// Fork commit by nathawat
+	runGit(t, seedDir, "config", "commit.gpgsign", "false")
+	runGit(t, seedDir, "config", "user.name", "nathawat")
+	runGit(t, seedDir, "config", "user.email", "nathawat@noreply.codeberg.org")
+	writeFile(t, filepath.Join(seedDir, "nathawat.txt"), "fork\n")
+	runGit(t, seedDir, "add", "nathawat.txt")
+	runGit(t, seedDir, "commit", "-m", "fork commit (#100)\n\nRefs: #100\nReviewed-on: https://codeberg.org/nathawat/howdy-next/pull/100\nCo-authored-by: Old Friend <old@friend.com>\n")
+
+	runGit(t, seedDir, "branch", "-M", "main")
+	runGit(t, seedDir, "push", "origin", "main")
+
+	cfg := config.New()
+	cfg.SourceURL = sourceDir
+	cfg.DestURL = destDir
+	cfg.OldRawAuthors = []string{"nathawat <nathawat@noreply.codeberg.org>"}
+	cfg.OldNames = []string{"nathawat"}
+	cfg.OldEmails = []string{"nathawat@noreply.codeberg.org"}
+	cfg.NewName = "Scott-Nx"
+	cfg.NewEmail = "158021536+Scott-Nx@users.noreply.github.com"
+	cfg.SignMode = "ssh"
+	cfg.SSHKey = scottKey
+	cfg.StripTitlePatterns = []string{`\s*\(#\d+\)`}
+	cfg.StripBodyPatterns = []string{`^Refs:?.*$`, `^Reviewed-on:.*$`}
+	cfg.CoauthorMode = "rewrite"
+	cfg.CoauthorFrom = []string{"Old Friend <old@friend.com>"}
+	cfg.CoauthorNewName = "New Friend"
+	cfg.CoauthorNewEmail = "new@friend.com"
+	cfg.Logger = pipelineTestLogger{}
+
+	if err := migration.Run(cfg); err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+
+	cloneDir := filepath.Join(root, "dest-clone")
+	runGit(t, root, "clone", destDir, cloneDir)
+	runGit(t, cloneDir, "checkout", "main")
+
+	// 1. Assert upstream commit by boltgolt is 100% untouched
+	boltAfter := strings.TrimSpace(runGitOutput(t, cloneDir, "rev-list", "--max-parents=0", "HEAD"))
+	if boltAfter != origBoltSHA {
+		t.Fatalf("Upstream boltgolt commit SHA changed from %s to %s", origBoltSHA, boltAfter)
+	}
+	boltCommit := runGitOutput(t, cloneDir, "cat-file", "commit", boltAfter)
+	if !strings.Contains(boltCommit, "-----BEGIN SSH SIGNATURE-----") {
+		t.Fatal("Upstream boltgolt commit lost signature")
+	}
+	if !strings.Contains(boltCommit, "upstream commit (#10)") {
+		t.Fatalf("Upstream boltgolt commit title was stripped: %s", boltCommit)
+	}
+	if !strings.Contains(boltCommit, "Reviewed-on: https://github.com/boltgolt/howdy/pull/10") {
+		t.Fatalf("Upstream boltgolt commit body was stripped: %s", boltCommit)
+	}
+
+	// 2. Assert fork commit by nathawat was rewritten and signed by Scott-Nx
+	forkCommit := runGitOutput(t, cloneDir, "cat-file", "commit", "HEAD")
+	if strings.Contains(forkCommit, "nathawat") {
+		t.Fatalf("Fork commit still contains old author: %s", forkCommit)
+	}
+	if !strings.Contains(forkCommit, "Scott-Nx <158021536+Scott-Nx@users.noreply.github.com>") {
+		t.Fatalf("Fork commit missing new identity: %s", forkCommit)
+	}
+	if !strings.Contains(forkCommit, "-----BEGIN SSH SIGNATURE-----") {
+		t.Fatal("Fork commit was not signed with SSH key")
+	}
+	if strings.Contains(forkCommit, "(#100)") {
+		t.Fatalf("Fork commit title (#100) was not stripped: %s", forkCommit)
+	}
+	if strings.Contains(forkCommit, "Refs:") || strings.Contains(forkCommit, "Reviewed-on:") {
+		t.Fatalf("Fork commit body was not stripped: %s", forkCommit)
+	}
+	if !strings.Contains(forkCommit, "Co-authored-by: New Friend <new@friend.com>") {
+		t.Fatalf("Fork commit coauthor trailer was not rewritten: %s", forkCommit)
+	}
+}
+
+func runCmd(t *testing.T, dir string, name string, args ...string) {
+	t.Helper()
+	cmd := exec.Command(name, args...)
+	cmd.Dir = dir
+	if output, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("%s %v failed: %v\n%s", name, args, err, output)
+	}
+}
+
 func writeFile(t *testing.T, path string, contents string) {
 	t.Helper()
 	if err := os.WriteFile(path, []byte(contents), 0644); err != nil {
