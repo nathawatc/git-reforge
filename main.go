@@ -19,19 +19,10 @@ func main() {
 	cfg.Logger = log
 
 	cmd := &cli.Command{
-		Name:  "git-reforge",
-		Usage: "Git repository forge migration and history rewriting tool",
+		Name:      "git-reforge",
+		Usage:     "Git repository forge migration and history rewriting tool",
+		ArgsUsage: "<source> [dest]",
 		Flags: []cli.Flag{
-			&cli.StringFlag{
-				Name:    "source",
-				Aliases: []string{"s"},
-				Usage:   "Source repository URL (e.g. GitHub, Codeberg, GitLab)",
-			},
-			&cli.StringFlag{
-				Name:    "dest",
-				Aliases: []string{"d"},
-				Usage:   "Destination repository URL (e.g. Codeberg, GitHub, GitLab)",
-			},
 			&cli.StringFlag{
 				Name:    "new-name",
 				Aliases: []string{"n"},
@@ -93,8 +84,8 @@ func main() {
 				Usage: "Save the rewritten repository to <path>",
 			},
 			&cli.BoolFlag{
-				Name:    "no-push",
-				Usage:   "Rewrite history locally but do not push",
+				Name:  "no-push",
+				Usage: "Rewrite history locally but do not push",
 			},
 			&cli.BoolFlag{
 				Name:    "yes",
@@ -103,8 +94,21 @@ func main() {
 			},
 		},
 		Action: func(ctx context.Context, c *cli.Command) error {
-			cfg.SourceURL = c.String("source")
-			cfg.DestURL = c.String("dest")
+			cfg.SaveDir = c.String("save-dir")
+			cfg.NoPush = c.Bool("no-push")
+
+			cfg.SourceURL = c.Args().Get(0)
+			if dest := c.Args().Get(1); dest != "" {
+				if config.IsLocalPath(dest) {
+					if cfg.SaveDir == "" {
+						cfg.SaveDir = dest
+					}
+					cfg.NoPush = true
+				} else {
+					cfg.DestURL = dest
+				}
+			}
+
 			cfg.NewName = c.String("new-name")
 			cfg.NewEmail = c.String("new-email")
 			cfg.Interactive = c.Bool("interactive")

@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"slices"
 	"strings"
 )
@@ -18,11 +19,11 @@ func ParseOldNames(values []string) []string {
 
 func Validate(cfg *Config) error {
 	if cfg.SourceURL == "" {
-		return fmt.Errorf("source URL is required (-s, --source)")
+		return fmt.Errorf("source repository is required (<source>)")
 	}
 
 	if cfg.DestURL == "" && !cfg.NoPush && cfg.SaveDir == "" {
-		return fmt.Errorf("destination URL is required (-d, --dest) unless --no-push or --save-dir is given")
+		return fmt.Errorf("destination is required (<dest>) unless --no-push or --save-dir is given")
 	}
 
 	if cfg.NewEmail == "" {
@@ -83,6 +84,15 @@ func Validate(cfg *Config) error {
 	}
 
 	return nil
+}
+
+// IsLocalPath reports whether a destination path refers to a local directory
+// rather than a remote Git repository URL.
+func IsLocalPath(s string) bool {
+	if strings.Contains(s, "://") || strings.HasPrefix(s, "git@") || strings.HasSuffix(s, ".git") {
+		return false
+	}
+	return filepath.IsAbs(s) || strings.HasPrefix(s, ".") || strings.HasPrefix(s, "~") || !strings.Contains(s, ":")
 }
 
 func CheckDependencies(cfg *Config) error {

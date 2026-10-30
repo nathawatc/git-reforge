@@ -116,3 +116,49 @@ func TestValidateRejectsCoauthorRewriteWithoutNewName(t *testing.T) {
 		t.Fatal("Validate() error = nil want error when coauthor rewrite has no new name")
 	}
 }
+
+func TestValidateRequiresSource(t *testing.T) {
+	cfg := validConfig()
+	cfg.SourceURL = ""
+
+	if err := Validate(cfg); err == nil {
+		t.Fatal("Validate() error = nil want error when SourceURL is empty")
+	}
+}
+
+func TestValidateRequiresDestUnlessNoPushOrSaveDir(t *testing.T) {
+	cfg := validConfig()
+	cfg.DestURL = ""
+	cfg.NoPush = false
+	cfg.SaveDir = ""
+
+	if err := Validate(cfg); err == nil {
+		t.Fatal("Validate() error = nil want error when DestURL is empty and NoPush/SaveDir not set")
+	}
+}
+
+func TestIsLocalPath(t *testing.T) {
+	tests := []struct {
+		path string
+		want bool
+	}{
+		{"https://github.com/org/repo.git", false},
+		{"https://codeberg.org/org/repo", false},
+		{"http://gitlab.com/org/repo", false},
+		{"git@github.com:org/repo.git", false},
+		{"ssh://git@codeberg.org:22/org/repo.git", false},
+		{"/tmp/bare.git", false},
+		{"./local-dir", true},
+		{"../local-dir", true},
+		{"/tmp/saved-repo", true},
+		{"~/saved-repo", true},
+		{"local-dir", true},
+	}
+
+	for _, tt := range tests {
+		got := IsLocalPath(tt.path)
+		if got != tt.want {
+			t.Errorf("IsLocalPath(%q) = %v want %v", tt.path, got, tt.want)
+		}
+	}
+}

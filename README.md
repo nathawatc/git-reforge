@@ -46,16 +46,21 @@ go build .
 ## Usage
 
 ```bash
-./git-reforge [OPTIONS]
+./git-reforge [OPTIONS] <source> [dest]
 ```
+
+### Arguments
+
+| Argument   | Description                                                                                       |
+| ---------- | ------------------------------------------------------------------------------------------------- |
+| `<source>` | Source repository URL                                                                             |
+| `[dest]`   | Destination repository URL or local path (not required when `--no-push` or `--save-dir` is given) |
 
 ### Required Options
 
-| Option                    | Description                                                                         |
-| ------------------------- | ----------------------------------------------------------------------------------- |
-| `-s, --source <url>`      | Source repository URL                                                               |
-| `-d, --dest <url>`        | Destination repository URL (not required when `--no-push` or `--save-dir` is given) |
-| `-e, --new-email <email>` | New author email                                                                    |
+| Option                    | Description      |
+| ------------------------- | ---------------- |
+| `-e, --new-email <email>` | New author email |
 
 ### Optional Options
 
@@ -91,8 +96,8 @@ go build .
 **Basic migration:**
 
 ```bash
-./git-reforge -s https://github.com/user/repo.git \
-  -d https://codeberg.org/user/repo.git \
+./git-reforge https://github.com/user/repo.git \
+  https://codeberg.org/user/repo.git \
   -o "OldName" \
   -e myuser@noreply.codeberg.org
 ```
@@ -100,8 +105,8 @@ go build .
 **Non-interactive / CI run:**
 
 ```bash
-./git-reforge -s https://github.com/user/repo.git \
-  -d https://codeberg.org/user/repo.git \
+./git-reforge https://github.com/user/repo.git \
+  https://codeberg.org/user/repo.git \
   -o "OldName" -n "NewName" \
   -e myuser@noreply.codeberg.org \
   -y
@@ -110,8 +115,8 @@ go build .
 **Interactive mode with custom author:**
 
 ```bash
-./git-reforge -s https://github.com/user/repo.git \
-  -d https://codeberg.org/user/repo.git \
+./git-reforge https://github.com/user/repo.git \
+  https://codeberg.org/user/repo.git \
   -o "OldName" -n "NewName" \
   -e newuser@noreply.codeberg.org \
   -i
@@ -120,8 +125,8 @@ go build .
 **With GPG re-signing:**
 
 ```bash
-./git-reforge -s https://github.com/user/repo.git \
-  -d https://codeberg.org/user/repo.git \
+./git-reforge https://github.com/user/repo.git \
+  https://codeberg.org/user/repo.git \
   -o "OldName" \
   -e myuser@noreply.codeberg.org \
   --sign-mode gpg --gpg-key ABCD1234
@@ -130,8 +135,8 @@ go build .
 **With SSH re-signing:**
 
 ```bash
-./git-reforge -s https://github.com/user/repo.git \
-  -d https://codeberg.org/user/repo.git \
+./git-reforge https://github.com/user/repo.git \
+  https://codeberg.org/user/repo.git \
   -o "OldName" \
   -e myuser@noreply.codeberg.org \
   --sign-mode ssh --ssh-key ~/.ssh/id_ed25519
@@ -140,8 +145,8 @@ go build .
 **Multiple old author names:**
 
 ```bash
-./git-reforge -s https://github.com/user/repo.git \
-  -d https://codeberg.org/user/repo.git \
+./git-reforge https://github.com/user/repo.git \
+  https://codeberg.org/user/repo.git \
   -o "OldName1" -o "OldName2" \
   -n "NewName" \
   -e newuser@noreply.codeberg.org
@@ -150,17 +155,17 @@ go build .
 **Rewrite locally and save without pushing:**
 
 ```bash
-./git-reforge -s https://github.com/user/repo.git \
+./git-reforge https://github.com/user/repo.git \
+  /path/to/output \
   -o "OldName" -n "NewName" \
-  -e newuser@noreply.codeberg.org \
-  --no-push --save-dir /path/to/output
+  -e newuser@noreply.codeberg.org
 ```
 
 **Save a local copy and push:**
 
 ```bash
-./git-reforge -s https://github.com/user/repo.git \
-  -d https://codeberg.org/user/repo.git \
+./git-reforge https://github.com/user/repo.git \
+  https://codeberg.org/user/repo.git \
   -o "OldName" -n "NewName" \
   -e newuser@noreply.codeberg.org \
   --save-dir /path/to/output
@@ -169,8 +174,8 @@ go build .
 **Remove all matching Co-authored-by trailers:**
 
 ```bash
-./git-reforge -s https://github.com/user/repo.git \
-  -d https://codeberg.org/user/repo.git \
+./git-reforge https://github.com/user/repo.git \
+  https://codeberg.org/user/repo.git \
   -o "OldName" \
   -e myuser@noreply.codeberg.org \
   --coauthor-mode remove --coauthor-old "OldName"
@@ -179,8 +184,8 @@ go build .
 **Rewrite Co-authored-by trailers:**
 
 ```bash
-./git-reforge -s https://github.com/user/repo.git \
-  -d https://codeberg.org/user/repo.git \
+./git-reforge https://github.com/user/repo.git \
+  https://codeberg.org/user/repo.git \
   -o "OldName" \
   -e myuser@noreply.codeberg.org \
   --coauthor-mode rewrite \
@@ -193,8 +198,8 @@ go build .
 **Interactive Co-authored-by review:**
 
 ```bash
-./git-reforge -s https://github.com/user/repo.git \
-  -d https://codeberg.org/user/repo.git \
+./git-reforge https://github.com/user/repo.git \
+  https://codeberg.org/user/repo.git \
   -o "OldName" \
   -e myuser@noreply.codeberg.org \
   --coauthor-mode interactive --coauthor-old "OldName"

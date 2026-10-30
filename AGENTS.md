@@ -69,7 +69,8 @@ pkg/
 
 ## Execution Flow
 
-1. `main()` initializes `logging.Logger` and `config.New()`, parses CLI flags via `urfave/cli/v3`.
+1. `main()` initializes `logging.Logger` and `config.New()`, parses positional arguments
+   (`<source> [dest]`) and CLI flags via `urfave/cli/v3`.
 2. `config.Validate(cfg)` verifies URLs, author requirements, signing mode, and directory existence.
 3. `config.CheckDependencies(cfg)` confirms presence of `git` and signing binaries (`gpg` / `ssh-keygen`).
 4. `ui.DisplayConfig(cfg)` displays configuration; if `cfg.Yes` is set, skips confirmation prompt.
