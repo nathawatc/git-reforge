@@ -98,14 +98,7 @@ func Validate(cfg *Config) error {
 
 	if cfg.CoauthorMode != "" {
 		if len(cfg.CoauthorFrom) == 0 {
-			if cfg.CoauthorOldName != "" {
-				cfg.CoauthorFrom = []string{cfg.CoauthorOldName}
-			} else {
-				cfg.CoauthorFrom = cfg.OldNames
-			}
-		}
-		if cfg.CoauthorOldName == "" && len(cfg.CoauthorFrom) > 0 {
-			cfg.CoauthorOldName = cfg.CoauthorFrom[0]
+			cfg.CoauthorFrom = cfg.OldNames
 		}
 		if cfg.CoauthorNewName == "" {
 			cfg.CoauthorNewName = cfg.NewName

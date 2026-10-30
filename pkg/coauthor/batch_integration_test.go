@@ -45,7 +45,7 @@ func TestRewriteBatchRewritesCoauthorTrailerWithSedSpecialReplacement(t *testing
 	cfg := config.New()
 	cfg.TempDir = tmpDir
 	cfg.CoauthorMode = "rewrite"
-	cfg.CoauthorOldName = "Alice"
+	cfg.CoauthorFrom = []string{"Alice"}
 	cfg.CoauthorNewName = "New.Name & Co"
 	cfg.CoauthorNewEmail = "new/name@example.org"
 	cfg.Logger = testLogger{}
@@ -102,8 +102,7 @@ func TestRewriteBatchRemoveNarrowsByCoauthorEmail(t *testing.T) {
 	cfg := config.New()
 	cfg.TempDir = tmpDir
 	cfg.CoauthorMode = "remove"
-	cfg.CoauthorOldName = "Alice"
-	cfg.CoauthorOldEmail = "alice@example.org"
+	cfg.CoauthorFrom = []string{"Alice <alice@example.org>"}
 	cfg.Logger = testLogger{}
 
 	if err := RewriteBatch(cfg); err != nil {
@@ -148,8 +147,7 @@ func TestRewriteBatchHandlesApostropheInCoauthorNamesAndEmails(t *testing.T) {
 	cfg := config.New()
 	cfg.TempDir = tmpDir
 	cfg.CoauthorMode = "rewrite"
-	cfg.CoauthorOldName = "O'Neil"
-	cfg.CoauthorOldEmail = "o'neil@example.org"
+	cfg.CoauthorFrom = []string{"O'Neil <o'neil@example.org>"}
 	cfg.CoauthorNewName = "D'Angelo"
 	cfg.CoauthorNewEmail = "d'angelo@example.org"
 	cfg.Logger = testLogger{}
@@ -191,7 +189,7 @@ func TestRewriteInteractiveAppliesPerCommitCoauthorDecision(t *testing.T) {
 	cfg := config.New()
 	cfg.TempDir = tmpDir
 	cfg.CoauthorMode = "interactive"
-	cfg.CoauthorOldName = "Alice"
+	cfg.CoauthorFrom = []string{"Alice"}
 	cfg.CoauthorNewName = "New Co"
 	cfg.CoauthorNewEmail = "newco@example.org"
 	cfg.Logger = testLogger{}

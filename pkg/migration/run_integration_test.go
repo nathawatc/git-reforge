@@ -60,8 +60,7 @@ func TestNonInteractiveMigrationPipelineLocalRepos(t *testing.T) {
 	cfg.NewName = "New User"
 	cfg.NewEmail = "new@example.org"
 	cfg.CoauthorMode = "rewrite"
-	cfg.CoauthorOldName = "Alice"
-	cfg.CoauthorOldEmail = "alice@example.org"
+	cfg.CoauthorFrom = []string{"Alice <alice@example.org>"}
 	cfg.CoauthorNewName = "New Co"
 	cfg.CoauthorNewEmail = "newco@example.org"
 	cfg.SignMode = "keep"

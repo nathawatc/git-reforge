@@ -85,23 +85,19 @@ type coauthorTarget struct {
 
 func parseCoauthorTargets(cfg *config.Config) []coauthorTarget {
 	var targets []coauthorTarget
-	if len(cfg.CoauthorFrom) > 0 {
-		for _, raw := range cfg.CoauthorFrom {
-			raw = strings.TrimSpace(raw)
-			if raw == "" {
-				continue
-			}
-			if addr, err := mail.ParseAddress(raw); err == nil && addr.Address != "" {
-				targets = append(targets, coauthorTarget{Name: addr.Name, Email: addr.Address})
-			} else {
-				targets = append(targets, coauthorTarget{Name: raw, Email: ""})
-			}
+	from := cfg.CoauthorFrom
+	if len(from) == 0 {
+		from = cfg.OldNames
+	}
+	for _, raw := range from {
+		raw = strings.TrimSpace(raw)
+		if raw == "" {
+			continue
 		}
-	} else if cfg.CoauthorOldName != "" {
-		targets = append(targets, coauthorTarget{Name: cfg.CoauthorOldName, Email: cfg.CoauthorOldEmail})
-	} else if len(cfg.OldNames) > 0 {
-		for _, name := range cfg.OldNames {
-			targets = append(targets, coauthorTarget{Name: name, Email: ""})
+		if addr, err := mail.ParseAddress(raw); err == nil && addr.Address != "" {
+			targets = append(targets, coauthorTarget{Name: addr.Name, Email: addr.Address})
+		} else {
+			targets = append(targets, coauthorTarget{Name: raw, Email: ""})
 		}
 	}
 	return targets

@@ -33,7 +33,7 @@ func TestBuildCoauthorMsgFilterEscapesReplacementOnlyAsReplacement(t *testing.T)
 	cfg := config.New()
 	cfg.TempDir = t.TempDir()
 	cfg.CoauthorMode = "rewrite"
-	cfg.CoauthorOldName = "Alice"
+	cfg.CoauthorFrom = []string{"Alice"}
 	cfg.CoauthorNewName = "New.Name & Co"
 	cfg.CoauthorNewEmail = "new/name@example.org"
 	outputPath := filepath.Join(cfg.TempDir, "coauthor_msg_filter.sh")

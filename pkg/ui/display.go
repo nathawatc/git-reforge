@@ -55,18 +55,11 @@ func DisplayConfig(cfg *config.Config) {
 	if cfg.CoauthorMode != "" {
 		fmt.Println()
 		fmt.Printf("  %sCo-author Mode:%s  %s\n", Bold, NC, cfg.CoauthorMode)
-		if len(cfg.CoauthorFrom) > 0 {
-			fmt.Printf("  %sCo-author Match:%s %s\n", Bold, NC, strings.Join(cfg.CoauthorFrom, ", "))
-		} else {
-			coauthorMatch := cfg.CoauthorOldName
-			if cfg.CoauthorOldEmail != "" {
-				coauthorMatch += " <" + cfg.CoauthorOldEmail + ">"
-			}
-			if coauthorMatch == "" && len(cfg.OldNames) > 0 {
-				coauthorMatch = strings.Join(cfg.OldNames, ", ")
-			}
-			fmt.Printf("  %sCo-author Match:%s %s\n", Bold, NC, coauthorMatch)
+		coauthorMatch := strings.Join(cfg.CoauthorFrom, ", ")
+		if coauthorMatch == "" {
+			coauthorMatch = strings.Join(cfg.OldNames, ", ")
 		}
+		fmt.Printf("  %sCo-author Match:%s %s\n", Bold, NC, coauthorMatch)
 		if cfg.CoauthorMode == "rewrite" {
 			fmt.Printf("  %sCo-author New:%s   %s <%s>\n", Bold, NC, cfg.CoauthorNewName, cfg.CoauthorNewEmail)
 		}

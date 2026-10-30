@@ -153,9 +153,6 @@ func TestValidateAppliesCoauthorDefaults(t *testing.T) {
 	if len(cfg.CoauthorFrom) != 1 || cfg.CoauthorFrom[0] != "Old Name" {
 		t.Fatalf("CoauthorFrom = %v want [Old Name]", cfg.CoauthorFrom)
 	}
-	if cfg.CoauthorOldName != "Old Name" {
-		t.Fatalf("CoauthorOldName = %q want Old Name", cfg.CoauthorOldName)
-	}
 	if cfg.CoauthorNewName != "New Name" {
 		t.Fatalf("CoauthorNewName = %q want New Name", cfg.CoauthorNewName)
 	}
