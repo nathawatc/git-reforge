@@ -7,7 +7,7 @@ import (
 	"git-reforge/pkg/config"
 )
 
-func TestMatchesCoauthor(t *testing.T) {
+func TestMatchesAnyCoauthor(t *testing.T) {
 	tests := []struct {
 		name          string
 		body          string
@@ -47,9 +47,9 @@ func TestMatchesCoauthor(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := matchesCoauthor(tt.body, tt.coauthorName, tt.coauthorEmail)
+			got := matchesAnyCoauthor(tt.body, []coauthorTarget{{Name: tt.coauthorName, Email: tt.coauthorEmail}})
 			if got != tt.want {
-				t.Errorf("matchesCoauthor() = %v want %v", got, tt.want)
+				t.Errorf("matchesAnyCoauthor() = %v want %v", got, tt.want)
 			}
 		})
 	}

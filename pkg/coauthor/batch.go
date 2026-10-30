@@ -290,10 +290,6 @@ func InteractiveCoauthorEdit(cfg *config.Config) {
 	}
 }
 
-func matchesCoauthor(body string, name string, email string) bool {
-	return len(extractMatchingLinesForTargets(body, []coauthorTarget{{Name: name, Email: email}})) > 0
-}
-
 func matchesAnyCoauthor(body string, targets []coauthorTarget) bool {
 	return len(extractMatchingLinesForTargets(body, targets)) > 0
 }
