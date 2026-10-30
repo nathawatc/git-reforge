@@ -6,26 +6,6 @@ import (
 	"testing"
 )
 
-func TestEscapeDoubleQuoted(t *testing.T) {
-	tests := []struct {
-		input string
-		want  string
-	}{
-		{"simple", "simple"},
-		{`with\ backslash`, `with\\ backslash`},
-		{`with"quote`, `with\"quote`},
-		{"with$dollar", `with\$dollar`},
-		{"with'single", "with'single"},
-	}
-
-	for _, tt := range tests {
-		got := EscapeDoubleQuoted(tt.input)
-		if got != tt.want {
-			t.Errorf("EscapeDoubleQuoted(%q) = %q want %q", tt.input, got, tt.want)
-		}
-	}
-}
-
 func TestEscapeSed(t *testing.T) {
 	tests := []struct {
 		input    string

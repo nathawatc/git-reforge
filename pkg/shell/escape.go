@@ -23,12 +23,6 @@ func HasFilterRepo() bool {
 }
 
 var (
-	doubleQuotedReplacer = strings.NewReplacer(
-		"\\", "\\\\",
-		"\"", "\\\"",
-		"`", "\\`",
-		"$", "\\$",
-	)
 	sedReplacer = strings.NewReplacer(
 		"\\", "\\\\",
 		"/", "\\/",
@@ -52,10 +46,6 @@ var (
 		"/", "\\/",
 	)
 )
-
-func EscapeDoubleQuoted(s string) string {
-	return doubleQuotedReplacer.Replace(s)
-}
 
 func EscapeSed(s string) string {
 	return sedReplacer.Replace(s)
