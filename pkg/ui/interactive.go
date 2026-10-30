@@ -15,30 +15,35 @@ func InteractiveEdit(cfg *config.Config) {
 	log := cfg.Logger
 	log.Header("Interactive Commit Editing")
 
-	var targets []string
-	if len(cfg.OldRawAuthors) > 0 {
-		targets = cfg.OldRawAuthors
-	} else {
-		targets = append(targets, cfg.OldNames...)
-		for _, e := range cfg.OldEmails {
-			if !slices.Contains(targets, e) {
-				targets = append(targets, e)
-			}
-		}
-	}
+	targets := cfg.DisplayedOldAuthors()
 	log.Info("Fetching commits from author(s): " + strings.Join(targets, ", "))
 
-	// Get all commits by old authors or committers
-	var commits []string
+	// Get all candidate commits by old authors or committers
+	var candidates []string
 	for _, oldName := range cfg.OldNames {
-		commits = append(commits, getCommitsByIdentity(cfg.WorkDir(), oldName)...)
+		candidates = append(candidates, getCommitsByIdentity(cfg.WorkDir(), oldName)...)
 	}
 	for _, oldEmail := range cfg.OldEmails {
-		commits = append(commits, getCommitsByIdentity(cfg.WorkDir(), oldEmail)...)
+		candidates = append(candidates, getCommitsByIdentity(cfg.WorkDir(), oldEmail)...)
 	}
 
-	// Remove duplicates
-	commits = uniqueList(commits)
+	// Verify candidate commits match old author/committer identities exactly
+	var commits []string
+	seen := make(map[string]bool)
+	for _, h := range candidates {
+		if seen[h] {
+			continue
+		}
+		seen[h] = true
+		info, err := git.CommitDetails(cfg.WorkDir(), h)
+		if err != nil {
+			continue
+		}
+		if slices.Contains(cfg.OldNames, info.AuthorName) || slices.Contains(cfg.OldEmails, info.AuthorEmail) ||
+			slices.Contains(cfg.OldNames, info.CommitterName) || slices.Contains(cfg.OldEmails, info.CommitterEmail) {
+			commits = append(commits, h)
+		}
+	}
 
 	if len(commits) == 0 {
 		log.Warning("No commits found from author(s): " + strings.Join(targets, ", "))
@@ -72,13 +77,14 @@ func InteractiveEdit(cfg *config.Config) {
 			fmt.Printf("  %sMessage:%s    %s\n", Cyan, NC, info.Subject)
 			fmt.Println()
 
-			if hasOverride && !override.Skip {
+			switch {
+			case hasOverride && !override.Skip:
 				fmt.Printf("  %sChanges:%s\n", Bold, NC)
 				fmt.Printf("    Name:    %s\n", override.Name)
 				fmt.Printf("    Email:   %s\n", override.Email)
-			} else if hasOverride && override.Skip {
+			case hasOverride && override.Skip:
 				fmt.Printf("  %sSkipped%s - No changes applied\n", Bold, NC)
-			} else {
+			default:
 				fmt.Printf("  %sDefault changes:%s\n", Bold, NC)
 				targetName := cfg.NewName
 				if targetName == "" {
@@ -120,13 +126,14 @@ func getCommitsByIdentity(workDir string, name string) []string {
 func getCommitsByLogFilter(workDir string, filter string) []string {
 	cmd := exec.Command("git", "log", "--all", "--format=%H", filter)
 	cmd.Dir = workDir
-	output, err := cmd.Output()
+	output, err := cmd.CombinedOutput()
 	if err != nil {
 		return nil
 	}
 
 	var commits []string
 	for line := range strings.SplitSeq(string(output), "\n") {
+		line = strings.TrimSpace(line)
 		if line != "" {
 			commits = append(commits, line)
 		}
@@ -223,13 +230,8 @@ func promptCommitChoice(commitHash string, remainingCommits []string, hasOverrid
 		case "D":
 			cfg.Logger.Info("Applying default changes to all remaining commits...")
 			for _, remainingHash := range remainingCommits {
-				targetName := cfg.NewName
-				if targetName == "" {
-					remInfo, _ := git.CommitDetails(cfg.WorkDir(), remainingHash)
-					targetName = remInfo.AuthorName
-				}
 				cfg.State.CommitOverrides[remainingHash] = config.CommitOverride{
-					Name:  targetName,
+					Name:  cfg.NewName,
 					Email: cfg.NewEmail,
 				}
 			}

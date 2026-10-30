@@ -3,14 +3,15 @@ package ui
 import (
 	"fmt"
 	"os"
-	"slices"
 	"strings"
 
 	"git-reforge/pkg/config"
 	"git-reforge/pkg/git"
 )
 
-func DisplayConfig(cfg *config.Config) {
+var ErrCancelled = fmt.Errorf("migration cancelled")
+
+func DisplayConfig(cfg *config.Config) error {
 	log := cfg.Logger
 	log.Header("Migration Configuration")
 
@@ -22,15 +23,7 @@ func DisplayConfig(cfg *config.Config) {
 	}
 	fmt.Println()
 
-	displayedOld := cfg.OldRawAuthors
-	if len(displayedOld) == 0 {
-		displayedOld = append([]string{}, cfg.OldNames...)
-		for _, e := range cfg.OldEmails {
-			if !slices.Contains(displayedOld, e) {
-				displayedOld = append(displayedOld, e)
-			}
-		}
-	}
+	displayedOld := cfg.DisplayedOldAuthors()
 
 	if len(displayedOld) == 1 {
 		fmt.Printf("  %sOld Author:%s    %s\n", Bold, NC, displayedOld[0])
@@ -93,7 +86,7 @@ func DisplayConfig(cfg *config.Config) {
 	}
 
 	if cfg.Yes {
-		return
+		return nil
 	}
 
 	prompts := NewPromptSession()
@@ -106,12 +99,13 @@ func DisplayConfig(cfg *config.Config) {
 	if err != nil {
 		log.Warning(err.Error())
 		log.Info("Migration cancelled")
-		os.Exit(0)
+		return ErrCancelled
 	}
 	if !strings.EqualFold(strings.TrimSpace(reply), "Y") {
 		log.Info("Migration cancelled")
-		os.Exit(0)
+		return ErrCancelled
 	}
+	return nil
 }
 
 func ShowSummary(cfg *config.Config) {
@@ -120,15 +114,7 @@ func ShowSummary(cfg *config.Config) {
 
 	fmt.Printf("  %s✓%s Repository history rewritten successfully\n", Green, NC)
 	if cfg.NewName != "" {
-		displayedOld := cfg.OldRawAuthors
-		if len(displayedOld) == 0 {
-			displayedOld = append([]string{}, cfg.OldNames...)
-			for _, e := range cfg.OldEmails {
-				if !slices.Contains(displayedOld, e) {
-					displayedOld = append(displayedOld, e)
-				}
-			}
-		}
+		displayedOld := cfg.DisplayedOldAuthors()
 
 		if len(displayedOld) == 1 {
 			fmt.Printf("  %s✓%s Author '%s' changed to '%s'\n", Green, NC, displayedOld[0], cfg.NewName)
