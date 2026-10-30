@@ -86,7 +86,7 @@ func Validate(cfg *Config) error {
 		return fmt.Errorf("at least one old author name or email is required (-f, --from)")
 	}
 
-	if slices.Contains(cfg.OldNames, "") && len(cfg.OldEmails) == 0 {
+	if slices.Contains(cfg.OldNames, "") {
 		return fmt.Errorf("empty string is not a valid old author name (-f, --from)")
 	}
 
@@ -117,11 +117,12 @@ func Validate(cfg *Config) error {
 	}
 
 	if cfg.SignMode == "" {
-		if cfg.GPGKey != "" {
+		switch {
+		case cfg.GPGKey != "":
 			cfg.SignMode = "gpg"
-		} else if cfg.SSHKey != "" {
+		case cfg.SSHKey != "":
 			cfg.SignMode = "ssh"
-		} else {
+		default:
 			cfg.SignMode = "keep"
 		}
 	}
@@ -154,11 +155,12 @@ func Validate(cfg *Config) error {
 
 	if cfg.CoauthorMode != "" {
 		if len(cfg.CoauthorFrom) == 0 {
-			if len(cfg.OldRawAuthors) > 0 {
+			switch {
+			case len(cfg.OldRawAuthors) > 0:
 				cfg.CoauthorFrom = cfg.OldRawAuthors
-			} else if len(cfg.OldNames) > 0 {
+			case len(cfg.OldNames) > 0:
 				cfg.CoauthorFrom = cfg.OldNames
-			} else {
+			default:
 				cfg.CoauthorFrom = cfg.OldEmails
 			}
 		}
@@ -203,8 +205,8 @@ func CheckDependencies(cfg *Config) error {
 		if _, err := exec.LookPath("ssh-keygen"); err != nil {
 			return fmt.Errorf("ssh-keygen is not installed (required for SSH signing)")
 		}
-		if _, err := os.Stat(cfg.SSHKey); os.IsNotExist(err) {
-			return fmt.Errorf("SSH key file not found: %s", cfg.SSHKey)
+		if _, err := os.Stat(cfg.SSHKey); err != nil {
+			return fmt.Errorf("SSH key file error: %w", err)
 		}
 	}
 

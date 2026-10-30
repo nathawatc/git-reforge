@@ -67,3 +67,19 @@ func TestInteractiveState(t *testing.T) {
 		t.Errorf("CoauthorActions[hash] = %q", state.CoauthorActions[hash])
 	}
 }
+
+func TestDisplayedOldAuthors(t *testing.T) {
+	cfg := New()
+	cfg.OldRawAuthors = []string{"Raw Author <raw@example.com>"}
+	if got := cfg.DisplayedOldAuthors(); len(got) != 1 || got[0] != "Raw Author <raw@example.com>" {
+		t.Errorf("DisplayedOldAuthors() with raw = %v", got)
+	}
+
+	cfg.OldRawAuthors = nil
+	cfg.OldNames = []string{"Name One", "Name Two"}
+	cfg.OldEmails = []string{"email1@example.com", "Name One"}
+	got := cfg.DisplayedOldAuthors()
+	if len(got) != 3 {
+		t.Errorf("DisplayedOldAuthors() len = %d want 3 (%v)", len(got), got)
+	}
+}

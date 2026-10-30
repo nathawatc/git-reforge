@@ -1,5 +1,7 @@
 package config
 
+import "slices"
+
 type Config struct {
 	SourceURL     string
 	DestURL       string
@@ -76,4 +78,18 @@ func New() *Config {
 
 func (c *Config) WorkDir() string {
 	return c.TempDir + "/working"
+}
+
+// DisplayedOldAuthors returns the list of old author names or emails to display.
+func (c *Config) DisplayedOldAuthors() []string {
+	if len(c.OldRawAuthors) > 0 {
+		return c.OldRawAuthors
+	}
+	out := append([]string{}, c.OldNames...)
+	for _, e := range c.OldEmails {
+		if !slices.Contains(out, e) {
+			out = append(out, e)
+		}
+	}
+	return out
 }
