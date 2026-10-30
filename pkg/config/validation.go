@@ -97,8 +97,15 @@ func Validate(cfg *Config) error {
 	}
 
 	if cfg.CoauthorMode != "" {
-		if cfg.CoauthorOldName == "" && len(cfg.OldNames) > 0 {
-			cfg.CoauthorOldName = cfg.OldNames[0]
+		if len(cfg.CoauthorFrom) == 0 {
+			if cfg.CoauthorOldName != "" {
+				cfg.CoauthorFrom = []string{cfg.CoauthorOldName}
+			} else {
+				cfg.CoauthorFrom = cfg.OldNames
+			}
+		}
+		if cfg.CoauthorOldName == "" && len(cfg.CoauthorFrom) > 0 {
+			cfg.CoauthorOldName = cfg.CoauthorFrom[0]
 		}
 		if cfg.CoauthorNewName == "" {
 			cfg.CoauthorNewName = cfg.NewName
@@ -107,7 +114,7 @@ func Validate(cfg *Config) error {
 			cfg.CoauthorNewEmail = cfg.NewEmail
 		}
 		if cfg.CoauthorMode == "rewrite" && cfg.CoauthorNewName == "" {
-			return fmt.Errorf("coauthor replacement name is required when --coauthor-mode=rewrite (--coauthor-new-name or -t)")
+			return fmt.Errorf("coauthor replacement name is required when --coauthor=rewrite (--coauthor-to or -t)")
 		}
 	}
 

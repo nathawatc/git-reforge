@@ -55,6 +55,32 @@ func TestBuildCoauthorMsgFilterEscapesReplacementOnlyAsReplacement(t *testing.T)
 	}
 }
 
+func TestBuildCoauthorMsgFilterMultipleTargets(t *testing.T) {
+	cfg := config.New()
+	cfg.TempDir = t.TempDir()
+	cfg.CoauthorMode = "rewrite"
+	cfg.CoauthorFrom = []string{"Alice", "Bob <bob@example.com>"}
+	cfg.CoauthorNewName = "New Author"
+	cfg.CoauthorNewEmail = "new@example.com"
+	outputPath := filepath.Join(cfg.TempDir, "coauthor_msg_filter.sh")
+
+	if err := buildCoauthorMsgFilter(cfg, outputPath, "batch"); err != nil {
+		t.Fatalf("buildCoauthorMsgFilter() error = %v", err)
+	}
+
+	contents, err := os.ReadFile(outputPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	script := string(contents)
+	if !strings.Contains(script, "Co-authored-by: Alice <[^>]*>") {
+		t.Fatalf("script missing Alice pattern:\n%s", script)
+	}
+	if !strings.Contains(script, `Co-authored-by: Bob <bob@example\.com>`) {
+		t.Fatalf("script missing Bob pattern:\n%s", script)
+	}
+}
+
 func TestMatchesCoauthor(t *testing.T) {
 	tests := []struct {
 		name          string

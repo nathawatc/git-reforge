@@ -78,13 +78,11 @@ go build .
 
 ### Co-Authored-by Options
 
-| Option                         | Description                                                          |
-| ------------------------------ | -------------------------------------------------------------------- |
-| `--coauthor-mode <mode>`       | Trailer mode: `rewrite\|remove\|interactive`                         |
-| `--coauthor-old <name>`        | Name to match in `Co-authored-by` trailers (default: first `--from`) |
-| `--coauthor-old-email <email>` | Email to narrow trailer match (optional)                             |
-| `--coauthor-new-name <name>`   | Replacement trailer name (default: name from `--to`)                 |
-| `--coauthor-new-email <email>` | Replacement trailer email (default: email from `--to`)               |
+| Option                    | Description                                                                    |
+| ------------------------- | ------------------------------------------------------------------------------ |
+| `-c, --coauthor <mode>`   | Trailer mode: `rewrite\|remove\|interactive` (alias: `--coauthor-mode`)        |
+| `--coauthor-from <names>` | Co-author name(s) or `"Name <email>"` to match (repeatable; default: `--from`) |
+| `--coauthor-to <author>`  | Replacement identity (`"Name <email>"` or `"email"`; default: `--to`)          |
 
 ### Examples
 
@@ -175,7 +173,7 @@ go build .
   https://codeberg.org/user/repo.git \
   -f "OldName" \
   -t myuser@noreply.codeberg.org \
-  --coauthor-mode remove --coauthor-old "OldName"
+  -c remove
 ```
 
 **Rewrite Co-authored-by trailers:**
@@ -185,11 +183,18 @@ go build .
   https://codeberg.org/user/repo.git \
   -f "OldName" \
   -t myuser@noreply.codeberg.org \
-  --coauthor-mode rewrite \
-  --coauthor-old "OldName" \
-  --coauthor-old-email "oldname@users.noreply.github.com" \
-  --coauthor-new-name "NewName" \
-  --coauthor-new-email "newname@noreply.codeberg.org"
+  -c rewrite
+```
+
+**Rewrite custom Co-authored-by trailers:**
+
+```bash
+./git-reforge https://github.com/user/repo.git \
+  https://codeberg.org/user/repo.git \
+  -f "OldName" \
+  -t myuser@noreply.codeberg.org \
+  --coauthor-from "Charlie <charlie@old.com>" \
+  --coauthor-to "Charlie <charlie@codeberg.org>"
 ```
 
 **Interactive Co-authored-by review:**
@@ -199,7 +204,7 @@ go build .
   https://codeberg.org/user/repo.git \
   -f "OldName" \
   -t myuser@noreply.codeberg.org \
-  --coauthor-mode interactive --coauthor-old "OldName"
+  -c interactive
 ```
 
 </details>
@@ -236,5 +241,5 @@ With `--coauthor-mode interactive`, you can review each affected commit:
 > - Rewriting commit history changes commit SHAs, which invalidates original cryptographic signatures.
 > - `--no-push` allows you to inspect the rewritten repository locally before pushing.
 > - Combine `--save-dir` and `--dest` to save a local backup copy and push to destination in one run.
-> - `Co-authored-by` matching is case-sensitive; supply `--coauthor-old-email` to narrow matches.
+> - `Co-authored-by` matching defaults to `--from`; supply `--coauthor-from` to match custom identities.
 > - `--save-dir` without `--dest` automatically implies `--no-push`.

@@ -16,6 +16,7 @@ type Config struct {
 
 	// Co-authored-by configuration
 	CoauthorMode     string
+	CoauthorFrom     []string
 	CoauthorOldName  string
 	CoauthorOldEmail string
 	CoauthorNewName  string

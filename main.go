@@ -52,24 +52,18 @@ func main() {
 				Usage:   "Strip all commit and tag signatures",
 			},
 			&cli.StringFlag{
-				Name:  "coauthor-mode",
-				Usage: "Co-authored-by trailer mode: rewrite|remove|interactive",
+				Name:    "coauthor",
+				Aliases: []string{"c", "coauthor-mode"},
+				Usage:   "Co-authored-by trailer mode: rewrite|remove|interactive",
+			},
+			&cli.StringSliceFlag{
+				Name:    "coauthor-from",
+				Aliases: []string{"coauthor-old"},
+				Usage:   "Co-author name(s) to match (default: --from)",
 			},
 			&cli.StringFlag{
-				Name:  "coauthor-old",
-				Usage: "Name to match in Co-authored-by trailers",
-			},
-			&cli.StringFlag{
-				Name:  "coauthor-old-email",
-				Usage: "Email to match in Co-authored-by trailers",
-			},
-			&cli.StringFlag{
-				Name:  "coauthor-new-name",
-				Usage: "Replacement name for Co-authored-by",
-			},
-			&cli.StringFlag{
-				Name:  "coauthor-new-email",
-				Usage: "Replacement email for Co-authored-by",
+				Name:  "coauthor-to",
+				Usage: "Replacement Co-authored-by identity (\"Name <email>\", default: --to)",
 			},
 			&cli.StringFlag{
 				Name:  "save-dir",
@@ -125,11 +119,20 @@ func main() {
 
 			cfg.Interactive = c.Bool("interactive")
 			cfg.Yes = c.Bool("yes")
-			cfg.CoauthorMode = c.String("coauthor-mode")
-			cfg.CoauthorOldName = c.String("coauthor-old")
-			cfg.CoauthorOldEmail = c.String("coauthor-old-email")
-			cfg.CoauthorNewName = c.String("coauthor-new-name")
-			cfg.CoauthorNewEmail = c.String("coauthor-new-email")
+			cfg.CoauthorMode = c.String("coauthor")
+			cfg.CoauthorFrom = config.ParseOldNames(c.StringSlice("coauthor-from"))
+			if coauthorTo := c.String("coauthor-to"); coauthorTo != "" {
+				name, email, err := config.ParseAuthor(coauthorTo)
+				if err != nil {
+					log.Error(err.Error())
+					return err
+				}
+				cfg.CoauthorNewName = name
+				cfg.CoauthorNewEmail = email
+			}
+			if cfg.CoauthorMode == "" && (c.IsSet("coauthor-from") || c.IsSet("coauthor-to")) {
+				cfg.CoauthorMode = "rewrite"
+			}
 
 			cfg.OldNames = config.ParseOldNames(c.StringSlice("from"))
 

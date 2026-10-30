@@ -150,6 +150,9 @@ func TestValidateAppliesCoauthorDefaults(t *testing.T) {
 	if err := Validate(cfg); err != nil {
 		t.Fatalf("Validate() error = %v", err)
 	}
+	if len(cfg.CoauthorFrom) != 1 || cfg.CoauthorFrom[0] != "Old Name" {
+		t.Fatalf("CoauthorFrom = %v want [Old Name]", cfg.CoauthorFrom)
+	}
 	if cfg.CoauthorOldName != "Old Name" {
 		t.Fatalf("CoauthorOldName = %q want Old Name", cfg.CoauthorOldName)
 	}
@@ -158,6 +161,27 @@ func TestValidateAppliesCoauthorDefaults(t *testing.T) {
 	}
 	if cfg.CoauthorNewEmail != "new@example.org" {
 		t.Fatalf("CoauthorNewEmail = %q want new@example.org", cfg.CoauthorNewEmail)
+	}
+}
+
+func TestValidateUsesExplicitCoauthorFromAndTo(t *testing.T) {
+	cfg := validConfig()
+	cfg.CoauthorMode = "rewrite"
+	cfg.CoauthorFrom = []string{"Charlie", "Dave <dave@example.org>"}
+	cfg.CoauthorNewName = "Eve"
+	cfg.CoauthorNewEmail = "eve@example.org"
+
+	if err := Validate(cfg); err != nil {
+		t.Fatalf("Validate() error = %v", err)
+	}
+	if len(cfg.CoauthorFrom) != 2 || cfg.CoauthorFrom[0] != "Charlie" || cfg.CoauthorFrom[1] != "Dave <dave@example.org>" {
+		t.Fatalf("CoauthorFrom = %v want [Charlie, Dave <dave@example.org>]", cfg.CoauthorFrom)
+	}
+	if cfg.CoauthorNewName != "Eve" {
+		t.Fatalf("CoauthorNewName = %q want Eve", cfg.CoauthorNewName)
+	}
+	if cfg.CoauthorNewEmail != "eve@example.org" {
+		t.Fatalf("CoauthorNewEmail = %q want eve@example.org", cfg.CoauthorNewEmail)
 	}
 }
 
