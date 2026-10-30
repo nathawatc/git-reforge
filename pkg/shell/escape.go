@@ -22,38 +22,47 @@ func HasFilterRepo() bool {
 	return err == nil
 }
 
+var (
+	doubleQuotedReplacer = strings.NewReplacer(
+		"\\", "\\\\",
+		"\"", "\\\"",
+		"`", "\\`",
+		"$", "\\$",
+	)
+	sedReplacer = strings.NewReplacer(
+		"\\", "\\\\",
+		"/", "\\/",
+		"[", "\\[",
+		"]", "\\]",
+		".", "\\.",
+		"^", "\\^",
+		"$", "\\$",
+		"*", "\\*",
+		"+", "\\+",
+		"?", "\\?",
+		"(", "\\(",
+		")", "\\)",
+		"{", "\\{",
+		"}", "\\}",
+		"|", "\\|",
+	)
+	sedReplacementReplacer = strings.NewReplacer(
+		"\\", "\\\\",
+		"&", "\\&",
+		"/", "\\/",
+	)
+)
+
 func EscapeDoubleQuoted(s string) string {
-	s = strings.ReplaceAll(s, "\\", "\\\\")
-	s = strings.ReplaceAll(s, "\"", "\\\"")
-	s = strings.ReplaceAll(s, "`", "\\`")
-	s = strings.ReplaceAll(s, "$", "\\$")
-	return s
+	return doubleQuotedReplacer.Replace(s)
 }
 
 func EscapeSed(s string) string {
-	s = strings.ReplaceAll(s, "\\", "\\\\")
-	s = strings.ReplaceAll(s, "/", "\\/")
-	s = strings.ReplaceAll(s, "[", "\\[")
-	s = strings.ReplaceAll(s, "]", "\\]")
-	s = strings.ReplaceAll(s, ".", "\\.")
-	s = strings.ReplaceAll(s, "^", "\\^")
-	s = strings.ReplaceAll(s, "$", "\\$")
-	s = strings.ReplaceAll(s, "*", "\\*")
-	s = strings.ReplaceAll(s, "+", "\\+")
-	s = strings.ReplaceAll(s, "?", "\\?")
-	s = strings.ReplaceAll(s, "(", "\\(")
-	s = strings.ReplaceAll(s, ")", "\\)")
-	s = strings.ReplaceAll(s, "{", "\\{")
-	s = strings.ReplaceAll(s, "}", "\\}")
-	s = strings.ReplaceAll(s, "|", "\\|")
-	return s
+	return sedReplacer.Replace(s)
 }
 
 func EscapeSedReplacement(s string) string {
-	s = strings.ReplaceAll(s, "\\", "\\\\")
-	s = strings.ReplaceAll(s, "&", "\\&")
-	s = strings.ReplaceAll(s, "/", "\\/")
-	return s
+	return sedReplacementReplacer.Replace(s)
 }
 
 func QuoteSingle(s string) string {
