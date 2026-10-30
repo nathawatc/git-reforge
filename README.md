@@ -69,7 +69,7 @@ go build .
 | `-i, --interactive` | Enable interactive mode for per-commit editing             |
 | `--gpg <keyid>`     | Re-sign commits and tags with GPG key ID                   |
 | `--ssh <path>`      | Re-sign commits and tags with SSH private key path         |
-| `--no-sign`         | Strip all commit and tag signatures (alias: `--nosign`)    |
+| `--no-sign`         | Strip all commit and tag signatures                        |
 | `--save-dir <path>` | Save rewritten repo to `<path>` (directory must not exist) |
 | `--no-push`         | Rewrite history locally but skip pushing to destination    |
 | `-y, --yes`         | Skip confirmation prompt for non-interactive / CI runs     |
@@ -79,7 +79,7 @@ go build .
 
 | Option                    | Description                                                                    |
 | ------------------------- | ------------------------------------------------------------------------------ |
-| `-c, --coauthor <mode>`   | Trailer mode: `rewrite\|remove\|interactive` (alias: `--coauthor-mode`)        |
+| `-c, --coauthor <mode>`   | Trailer mode: `rewrite\|remove\|interactive`                                   |
 | `--coauthor-from <names>` | Co-author name(s) or `"Name <email>"` to match (repeatable; default: `--from`) |
 | `--coauthor-to <author>`  | Replacement identity (`"Name <email>"` or `"email"`; default: `--to`)          |
 
@@ -223,7 +223,7 @@ When using the `-i` flag, you can review each commit individually:
 
 ### Co-Authored-by Interactive Mode
 
-With `--coauthor-mode interactive`, you can review each affected commit:
+With `--coauthor interactive`, you can review each affected commit:
 
 | Key  | Action                                   |
 | ---- | ---------------------------------------- |

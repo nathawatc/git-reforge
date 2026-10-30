@@ -35,8 +35,8 @@ func main() {
 			},
 			&cli.StringSliceFlag{
 				Name:    "from",
-				Aliases: []string{"f", "old-name", "o"},
-				Usage:   "Old author name(s) to replace",
+				Aliases: []string{"f"},
+				Usage:   "Old author identity (\"Name <email>\", \"Name\", or \"email\")",
 			},
 			&cli.BoolFlag{
 				Name:    "interactive",
@@ -52,33 +52,29 @@ func main() {
 				Usage: "SSH key path for re-signing commits and tags",
 			},
 			&cli.BoolFlag{
-				Name:    "no-sign",
-				Aliases: []string{"nosign"},
-				Usage:   "Strip all commit and tag signatures",
+				Name:  "no-sign",
+				Usage: "Strip all commit and tag signatures",
 			},
 			&cli.StringFlag{
 				Name:    "coauthor",
-				Aliases: []string{"c", "coauthor-mode"},
+				Aliases: []string{"c"},
 				Usage:   "Co-authored-by trailer mode: rewrite|remove|interactive",
 			},
 			&cli.StringSliceFlag{
-				Name:    "coauthor-from",
-				Aliases: []string{"coauthor-old"},
-				Usage:   "Co-author name(s) to match (default: --from)",
+				Name:  "coauthor-from",
+				Usage: "Co-author name(s) to match (default: --from)",
 			},
 			&cli.StringFlag{
 				Name:  "coauthor-to",
 				Usage: "Replacement Co-authored-by identity (\"Name <email>\", default: --to)",
 			},
 			&cli.StringSliceFlag{
-				Name:    "strip-title",
-				Aliases: []string{"strip-subject"},
-				Usage:   "Regex pattern(s) to strip from commit title (can be specified multiple times)",
+				Name:  "strip-title",
+				Usage: "Regex pattern(s) to strip from commit title",
 			},
 			&cli.StringSliceFlag{
-				Name:    "strip-body",
-				Aliases: []string{"strip-message"},
-				Usage:   "Regex pattern(s) to strip from commit body (can be specified multiple times)",
+				Name:  "strip-body",
+				Usage: "Regex pattern(s) to strip from commit body",
 			},
 			&cli.StringFlag{
 				Name:  "save-dir",
