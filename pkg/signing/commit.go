@@ -238,9 +238,9 @@ func ResignTags(cfg *config.Config) error {
 	return nil
 }
 
-func getTagRecreateMessage(tmpDir string, tagName string) (string, error) {
+func getTagRecreateMessage(workDir string, tagName string) (string, error) {
 	cmd := exec.Command("git", "tag", "-l", "--format=%(contents:subject)%00%(contents:body)", tagName)
-	cmd.Dir = tmpDir + "/working"
+	cmd.Dir = workDir
 	output, err := cmd.Output()
 	if err != nil {
 		return "", fmt.Errorf("git tag contents failed: %w", err)
@@ -260,9 +260,9 @@ func getTagRecreateMessage(tmpDir string, tagName string) (string, error) {
 	return subject + "\n\n" + body, nil
 }
 
-func getTagCommit(tmpDir string, tagName string) (string, error) {
+func getTagCommit(workDir string, tagName string) (string, error) {
 	cmd := exec.Command("git", "rev-list", "-1", tagName)
-	cmd.Dir = tmpDir + "/working"
+	cmd.Dir = workDir
 	output, err := cmd.Output()
 	if err != nil {
 		return "", fmt.Errorf("git rev-list failed: %w", err)
@@ -276,9 +276,9 @@ type taggerInfo struct {
 	date  string
 }
 
-func getTagTagger(tmpDir string, tagName string) (taggerInfo, error) {
+func getTagTagger(workDir string, tagName string) (taggerInfo, error) {
 	cmd := exec.Command("git", "for-each-ref", "--format=%(taggername)%00%(taggeremail:trim)%00%(taggerdate:raw)", "refs/tags/"+tagName)
-	cmd.Dir = tmpDir + "/working"
+	cmd.Dir = workDir
 	output, err := cmd.Output()
 	if err != nil {
 		return taggerInfo{}, fmt.Errorf("git tagger info failed: %w", err)
@@ -319,15 +319,16 @@ func taggerEnv(cfg *config.Config, info taggerInfo) []string {
 }
 
 func recreateTag(cfg *config.Config, tagName string, desc string, prefixArgs []string, tagFlags ...string) error {
-	msg, err := getTagRecreateMessage(cfg.TempDir, tagName)
+	workDir := cfg.WorkDir()
+	msg, err := getTagRecreateMessage(workDir, tagName)
 	if err != nil {
 		return err
 	}
-	tagCommit, err := getTagCommit(cfg.TempDir, tagName)
+	tagCommit, err := getTagCommit(workDir, tagName)
 	if err != nil {
 		return err
 	}
-	tagger, err := getTagTagger(cfg.TempDir, tagName)
+	tagger, err := getTagTagger(workDir, tagName)
 	if err != nil {
 		return err
 	}
@@ -338,7 +339,7 @@ func recreateTag(cfg *config.Config, tagName string, desc string, prefixArgs []s
 	args = append(args, tagName, tagCommit, "-m", msg)
 
 	cmd := exec.Command("git", args...)
-	cmd.Dir = cfg.WorkDir()
+	cmd.Dir = workDir
 	cmd.Env = taggerEnv(cfg, tagger)
 	return shell.RunCommand(cmd, desc)
 }

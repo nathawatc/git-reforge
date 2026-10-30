@@ -46,7 +46,7 @@ func Run(cfg *config.Config) (retErr error) {
 	}
 
 	if cfg.SaveDir != "" {
-		if err := git.Save(cfg.TempDir, cfg.SaveDir); err != nil {
+		if err := git.Save(cfg.WorkDir(), cfg.SaveDir); err != nil {
 			return err
 		}
 	}

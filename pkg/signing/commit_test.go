@@ -41,7 +41,7 @@ func TestStripTagPreservesSubjectAndBody(t *testing.T) {
 	cfg.TempDir = tmpDir
 	cfg.Logger = testLogger{}
 
-	before, err := getTagRecreateMessage(tmpDir, "v1.0.0")
+	before, err := getTagRecreateMessage(workDir, "v1.0.0")
 	if err != nil {
 		t.Fatalf("getTagRecreateMessage() before error = %v", err)
 	}
@@ -54,7 +54,7 @@ func TestStripTagPreservesSubjectAndBody(t *testing.T) {
 		t.Fatalf("stripTag() error = %v", err)
 	}
 
-	after, err := getTagRecreateMessage(tmpDir, "v1.0.0")
+	after, err := getTagRecreateMessage(workDir, "v1.0.0")
 	if err != nil {
 		t.Fatalf("getTagRecreateMessage() after error = %v", err)
 	}
@@ -121,7 +121,7 @@ func TestGetTagRecreateMessagePreservesIndentedBody(t *testing.T) {
 	runGit(t, workDir, "commit", "-m", "initial")
 	runGit(t, workDir, "tag", "-a", "v1.0.1", "-m", "Release v1.0.1", "-m", "  indented body\nnext line")
 
-	got, err := getTagRecreateMessage(tmpDir, "v1.0.1")
+	got, err := getTagRecreateMessage(workDir, "v1.0.1")
 	if err != nil {
 		t.Fatalf("getTagRecreateMessage() error = %v", err)
 	}

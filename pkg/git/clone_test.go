@@ -409,7 +409,7 @@ func TestPushBranchesPushesMultipleBranches(t *testing.T) {
 	runGit(t, workDir, "add", "f3.txt")
 	runGit(t, workDir, "commit", "-m", "feature-b commit")
 
-	if err := pushBranches(root); err != nil {
+	if err := pushBranches(workDir); err != nil {
 		t.Fatalf("pushBranches() error = %v", err)
 	}
 

@@ -166,21 +166,21 @@ func defaultBranchName(workDir string) (string, error) {
 
 // Push pushes all branches and tags to the destination
 func Push(cfg *config.Config) error {
-	tmpDir := cfg.TempDir
+	workDir := cfg.WorkDir()
 	destURL := cfg.DestURL
 
 	cmd := exec.Command("git", "remote", "set-url", "origin", destURL)
-	cmd.Dir = tmpDir + "/working"
+	cmd.Dir = workDir
 	if err := shell.RunCommand(cmd, "set remote origin URL"); err != nil {
 		cmd = exec.Command("git", "remote", "add", "origin", destURL)
-		cmd.Dir = tmpDir + "/working"
+		cmd.Dir = workDir
 		if err := shell.RunCommand(cmd, "add remote origin"); err != nil {
 			return fmt.Errorf("failed to set remote URL: %w", err)
 		}
 	}
 
 	// Push all branches
-	if err := pushBranches(tmpDir); err != nil {
+	if err := pushBranches(workDir); err != nil {
 		if saveErr := PromptSaveOrCleanup(cfg, "branch push"); saveErr != nil {
 			return saveErr
 		}
@@ -188,7 +188,7 @@ func Push(cfg *config.Config) error {
 	}
 
 	// Push tags with explicit refspec
-	if err := pushTags(tmpDir); err != nil {
+	if err := pushTags(workDir); err != nil {
 		if saveErr := PromptSaveOrCleanup(cfg, "tag push"); saveErr != nil {
 			return saveErr
 		}
@@ -198,9 +198,7 @@ func Push(cfg *config.Config) error {
 	return nil
 }
 
-func pushBranches(tmpDir string) error {
-	workDir := tmpDir + "/working"
-
+func pushBranches(workDir string) error {
 	refspecs, err := branchRefspecs(workDir)
 	if err != nil {
 		return err
@@ -219,8 +217,7 @@ func pushBranches(tmpDir string) error {
 	return nil
 }
 
-func pushTags(tmpDir string) error {
-	workDir := tmpDir + "/working"
+func pushTags(workDir string) error {
 
 	tagRefs, err := listRefs(workDir, "refs/tags")
 	if err != nil {
@@ -372,7 +369,7 @@ func promptSavePath(cfg *config.Config, tty *os.File, reader *bufio.Reader) erro
 		}
 
 		cfg.Logger.Info("Saving rewritten repository to: " + savePath)
-		if err := Save(cfg.TempDir, savePath); err != nil {
+		if err := Save(cfg.WorkDir(), savePath); err != nil {
 			return fmt.Errorf("failed to save repository to %s: %w", savePath, err)
 		}
 
@@ -393,8 +390,11 @@ func promptSavePath(cfg *config.Config, tty *os.File, reader *bufio.Reader) erro
 }
 
 // Save copies the working repository to saveDir
-func Save(tmpDir string, saveDir string) error {
-	workDir := tmpDir + "/working"
+func Save(sourceDir string, saveDir string) error {
+	workDir := sourceDir
+	if fi, err := os.Stat(filepath.Join(sourceDir, "working")); err == nil && fi.IsDir() {
+		workDir = filepath.Join(sourceDir, "working")
+	}
 	if err := PruneOriginalRefs(workDir); err != nil {
 		return err
 	}

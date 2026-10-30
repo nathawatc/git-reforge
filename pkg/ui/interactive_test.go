@@ -32,7 +32,7 @@ func TestGetCommitsByIdentityIncludesCommitterMatches(t *testing.T) {
 		"GIT_COMMITTER_EMAIL=old@example.org",
 	}, "commit", "-m", "committer match")
 
-	commits := getCommitsByIdentity(tmpDir, "Old Committer")
+	commits := getCommitsByIdentity(workDir, "Old Committer")
 	if len(commits) != 1 {
 		t.Fatalf("getCommitsByIdentity() returned %d commits, want 1: %v", len(commits), commits)
 	}
