@@ -56,91 +56,115 @@ func RewriteCommitsInteractive(cfg *config.Config) error {
 	return rewriteInteractiveFilterRepo(cfg)
 }
 
-const pyStripCommitMessage = `strip_title = [re.compile(p.encode('utf-8')) for p in (cfg.get('strip_title') or [])]
-strip_body = []
-for p in (cfg.get('strip_body') or []):
-    pat = p.encode('utf-8')
-    if pat.endswith(b'$'):
-        pat += rb'(?:\r?\n)?'
-    strip_body.append(re.compile(pat, re.MULTILINE))
-
-if strip_title or strip_body:
-    parts = commit.message.split(b'\n', 1)
-    title = parts[0]
-    body = parts[1] if len(parts) > 1 else b''
-
-    for p in strip_title:
-        title = p.sub(b'', title)
-    title = title.rstrip()
-
-    for p in strip_body:
-        body = p.sub(b'', body)
-    body = re.sub(rb'\n{3,}', rb'\n\n', body).strip(b'\r\n')
-
-    if body:
-        commit.message = title + b'\n\n' + body + b'\n'
-    else:
-        commit.message = title + b'\n'
-`
-
 func rewriteBatchFilterRepo(cfg *config.Config) error {
 	log := cfg.Logger
-	stripTitle := cfg.StripTitlePatterns
-	if stripTitle == nil {
-		stripTitle = []string{}
-	}
-	stripBody := cfg.StripBodyPatterns
-	if stripBody == nil {
-		stripBody = []string{}
-	}
+	args := []string{"git", "filter-repo", "--force"}
 
-	dataFile := filepath.Join(cfg.TempDir, "filter_batch.json")
-	data := map[string]any{
-		"old_names":   cfg.OldNames,
-		"old_emails":  cfg.OldEmails,
-		"new_name":    cfg.NewName,
-		"new_email":   cfg.NewEmail,
-		"strip_title": stripTitle,
-		"strip_body":  stripBody,
-	}
-	b, err := json.Marshal(data)
+	mailmapPath, err := generateMailmap(cfg)
 	if err != nil {
 		return err
 	}
-	if err := os.WriteFile(dataFile, b, 0644); err != nil {
-		return err
+	if mailmapPath != "" {
+		args = append(args, "--mailmap", mailmapPath)
 	}
 
-	pyCallback := fmt.Sprintf(`import json, re
-with open(%q, 'r', encoding='utf-8') as f:
-    cfg = json.load(f)
+	replaceMsgPath, err := generateReplaceMessage(cfg)
+	if err != nil {
+		return err
+	}
+	if replaceMsgPath != "" {
+		args = append(args, "--replace-message", replaceMsgPath)
+	}
 
-old_names = {n.encode('utf-8') for n in (cfg.get('old_names') or []) if n}
-old_emails = {e.encode('utf-8') for e in (cfg.get('old_emails') or []) if e}
-new_name = cfg['new_name'].encode('utf-8')
-new_email = cfg['new_email'].encode('utf-8')
+	if mailmapPath == "" && replaceMsgPath == "" {
+		args = append(args, "--proceed")
+	}
 
-match_author = (commit.author_name in old_names) or (commit.author_email in old_emails)
-if match_author:
-    if new_name:
-        commit.author_name = new_name
-    commit.author_email = new_email
-
-match_committer = (commit.committer_name in old_names) or (commit.committer_email in old_emails)
-if match_committer:
-    if new_name:
-        commit.committer_name = new_name
-    commit.committer_email = new_email
-
-`+pyStripCommitMessage, dataFile)
-
-	cmd := exec.Command("git", "filter-repo", "--force", "--commit-callback", pyCallback)
+	cmd := exec.Command(args[0], args[1:]...)
 	cmd.Dir = cfg.WorkDir()
 	if err := shell.RunCommand(cmd, "git-filter-repo batch"); err != nil {
 		return err
 	}
 	log.Success("Commit history rewritten successfully")
 	return nil
+}
+
+func generateMailmap(cfg *config.Config) (string, error) {
+	if cfg.NewEmail == "" && cfg.NewName == "" {
+		return "", nil
+	}
+
+	var lines []string
+	targetName := cfg.NewName
+	targetEmail := cfg.NewEmail
+
+	for _, raw := range cfg.OldRawAuthors {
+		name, email, _ := config.ParseAuthor(raw)
+		if name != "" && email != "" {
+			if targetName != "" {
+				lines = append(lines, fmt.Sprintf("%s <%s> %s <%s>", targetName, targetEmail, name, email))
+			} else {
+				lines = append(lines, fmt.Sprintf("<%s> %s <%s>", targetEmail, name, email))
+			}
+		}
+	}
+
+	for _, name := range cfg.OldNames {
+		if name == "" {
+			continue
+		}
+		if targetName != "" {
+			lines = append(lines, fmt.Sprintf("%s <%s> %s", targetName, targetEmail, name))
+		} else {
+			lines = append(lines, fmt.Sprintf("<%s> %s", targetEmail, name))
+		}
+	}
+
+	for _, email := range cfg.OldEmails {
+		if email == "" {
+			continue
+		}
+		if targetName != "" {
+			lines = append(lines, fmt.Sprintf("%s <%s> <%s>", targetName, targetEmail, email))
+		} else {
+			lines = append(lines, fmt.Sprintf("<%s> <%s>", targetEmail, email))
+		}
+	}
+
+	if len(lines) == 0 {
+		return "", nil
+	}
+
+	mailmapPath := filepath.Join(cfg.TempDir, "mailmap.txt")
+	content := strings.Join(lines, "\n") + "\n"
+	if err := os.WriteFile(mailmapPath, []byte(content), 0644); err != nil {
+		return "", err
+	}
+	return mailmapPath, nil
+}
+
+func generateReplaceMessage(cfg *config.Config) (string, error) {
+	var lines []string
+	for _, p := range cfg.StripTitlePatterns {
+		if strings.TrimSpace(p) != "" {
+			lines = append(lines, "regex:"+p+"==>")
+		}
+	}
+	for _, p := range cfg.StripBodyPatterns {
+		if strings.TrimSpace(p) != "" {
+			lines = append(lines, "regex:(?m)"+p+"(\\r?\\n)?==>")
+		}
+	}
+	if len(lines) == 0 {
+		return "", nil
+	}
+
+	path := filepath.Join(cfg.TempDir, "replace_message.txt")
+	content := strings.Join(lines, "\n") + "\n"
+	if err := os.WriteFile(path, []byte(content), 0644); err != nil {
+		return "", err
+	}
+	return path, nil
 }
 
 func rewriteInteractiveFilterRepo(cfg *config.Config) error {
@@ -195,7 +219,32 @@ if cid in messages:
         msg += '\n'
     commit.message = msg.encode('utf-8')
 
-`+pyStripCommitMessage, dataFile)
+strip_title = [re.compile(p.encode('utf-8')) for p in (cfg.get('strip_title') or [])]
+strip_body = []
+for p in (cfg.get('strip_body') or []):
+    pat = p.encode('utf-8')
+    if pat.endswith(b'$'):
+        pat += rb'(?:\r?\n)?'
+    strip_body.append(re.compile(pat, re.MULTILINE))
+
+if strip_title or strip_body:
+    parts = commit.message.split(b'\n', 1)
+    title = parts[0]
+    body = parts[1] if len(parts) > 1 else b''
+
+    for p in strip_title:
+        title = p.sub(b'', title)
+    title = title.rstrip()
+
+    for p in strip_body:
+        body = p.sub(b'', body)
+    body = re.sub(rb'\n{3,}', rb'\n\n', body).strip(b'\r\n')
+
+    if body:
+        commit.message = title + b'\n\n' + body + b'\n'
+    else:
+        commit.message = title + b'\n'
+`, dataFile)
 
 	cmd := exec.Command("git", "filter-repo", "--force", "--commit-callback", pyCallback)
 	cmd.Dir = cfg.WorkDir()
