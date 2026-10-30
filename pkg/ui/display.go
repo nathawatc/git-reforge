@@ -99,7 +99,7 @@ func DisplayConfig(cfg *config.Config) error {
 	if err != nil {
 		log.Warning(err.Error())
 		log.Info("Migration cancelled")
-		return ErrCancelled
+		return fmt.Errorf("failed to read confirmation: %w", err)
 	}
 	if !strings.EqualFold(strings.TrimSpace(reply), "Y") {
 		log.Info("Migration cancelled")
