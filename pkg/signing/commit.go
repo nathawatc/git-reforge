@@ -35,40 +35,11 @@ func handleNone(cfg *config.Config) error {
 	log.Header("Removing Signatures")
 	log.Info("Stripping all commit signatures...")
 
-	if shell.HasFilterRepo() {
-		cmd := exec.Command("git", "filter-repo", "--force", "--commit-callback", "pass")
-		cmd.Dir = cfg.WorkDir()
-		if err := shell.RunCommand(cmd, "git-filter-repo strip signatures"); err != nil {
-			return err
-		}
-		log.Success("Signatures removed")
-		return ResignTags(cfg)
-	}
-
-	// Disable signing locally
-	cmd := exec.Command("git", "config", "gpg.sign", "false")
+	cmd := exec.Command("git", "filter-repo", "--force", "--commit-callback", "pass")
 	cmd.Dir = cfg.WorkDir()
-	if err := shell.RunCommand(cmd, "git config gpg.sign"); err != nil {
+	if err := shell.RunCommand(cmd, "git-filter-repo strip signatures"); err != nil {
 		return err
 	}
-	defer func() {
-		unsetCmd := exec.Command("git", "config", "--unset", "gpg.sign")
-		unsetCmd.Dir = cfg.WorkDir()
-		_ = unsetCmd.Run()
-	}()
-
-	// Run filter-branch to recreate commits without signatures.
-	// The env-filter touches GIT_COMMITTER_DATE (even to its original value)
-	// to force filter-branch to process every commit; gpg.sign=false ensures
-	// the recreated objects are not signed.
-	cmd = exec.Command("git", "filter-branch", "-f", "--env-filter", `
-export GIT_COMMITTER_DATE="$GIT_COMMITTER_DATE"
-`, "--tag-name-filter", "cat", "--", "--all")
-	cmd.Dir = cfg.WorkDir()
-	if err := shell.RunCommand(cmd, "filter-branch"); err != nil {
-		return err
-	}
-
 	log.Success("Signatures removed")
 	return ResignTags(cfg)
 }
