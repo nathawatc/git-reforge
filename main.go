@@ -39,20 +39,17 @@ func main() {
 				Usage:   "Enable interactive mode for per-commit editing",
 			},
 			&cli.StringFlag{
-				Name:  "sign-mode",
-				Usage: "Signing mode: keep|gpg|ssh|none (default: keep)",
+				Name:  "gpg",
+				Usage: "GPG key ID for re-signing commits and tags",
 			},
 			&cli.StringFlag{
-				Name:  "gpg-key",
-				Usage: "GPG key ID for re-signing",
-			},
-			&cli.StringFlag{
-				Name:  "ssh-key",
-				Usage: "SSH key path for re-signing",
+				Name:  "ssh",
+				Usage: "SSH key path for re-signing commits and tags",
 			},
 			&cli.BoolFlag{
-				Name:  "nosign",
-				Usage: "Shorthand for --sign-mode=none",
+				Name:    "no-sign",
+				Aliases: []string{"nosign"},
+				Usage:   "Strip all commit and tag signatures",
 			},
 			&cli.StringFlag{
 				Name:  "coauthor-mode",
@@ -114,20 +111,25 @@ func main() {
 				cfg.NewEmail = email
 			}
 
+			if gpg := c.String("gpg"); gpg != "" {
+				cfg.SignMode = "gpg"
+				cfg.GPGKey = gpg
+			}
+			if ssh := c.String("ssh"); ssh != "" {
+				cfg.SignMode = "ssh"
+				cfg.SSHKey = ssh
+			}
+			if c.Bool("no-sign") {
+				cfg.SignMode = "none"
+			}
+
 			cfg.Interactive = c.Bool("interactive")
-			cfg.SignMode = c.String("sign-mode")
-			cfg.GPGKey = c.String("gpg-key")
-			cfg.SSHKey = c.String("ssh-key")
 			cfg.Yes = c.Bool("yes")
 			cfg.CoauthorMode = c.String("coauthor-mode")
 			cfg.CoauthorOldName = c.String("coauthor-old")
 			cfg.CoauthorOldEmail = c.String("coauthor-old-email")
 			cfg.CoauthorNewName = c.String("coauthor-new-name")
 			cfg.CoauthorNewEmail = c.String("coauthor-new-email")
-
-			if c.Bool("nosign") {
-				cfg.SignMode = "none"
-			}
 
 			cfg.OldNames = config.ParseOldNames(c.StringSlice("from"))
 

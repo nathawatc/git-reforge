@@ -65,17 +65,16 @@ go build .
 
 ### Optional Options
 
-| Option               | Description                                                 |
-| -------------------- | ----------------------------------------------------------- |
-| `-i, --interactive`  | Enable interactive mode for per-commit editing              |
-| `--sign-mode <mode>` | Signing mode: `keep\|gpg\|ssh\|none` (default: `keep`)      |
-| `--gpg-key <keyid>`  | GPG key ID for re-signing (required if `--sign-mode=gpg`)   |
-| `--ssh-key <path>`   | SSH key path for re-signing (required if `--sign-mode=ssh`) |
-| `--nosign`           | Shorthand for `--sign-mode=none`                            |
-| `--save-dir <path>`  | Save rewritten repo to `<path>` (directory must not exist)  |
-| `--no-push`          | Rewrite history locally but skip pushing to destination     |
-| `-y, --yes`          | Skip confirmation prompt for non-interactive / CI runs      |
-| `-h, --help`         | Show help message                                           |
+| Option              | Description                                                |
+| ------------------- | ---------------------------------------------------------- |
+| `-i, --interactive` | Enable interactive mode for per-commit editing             |
+| `--gpg <keyid>`     | Re-sign commits and tags with GPG key ID                   |
+| `--ssh <path>`      | Re-sign commits and tags with SSH private key path         |
+| `--no-sign`         | Strip all commit and tag signatures (alias: `--nosign`)    |
+| `--save-dir <path>` | Save rewritten repo to `<path>` (directory must not exist) |
+| `--no-push`         | Rewrite history locally but skip pushing to destination    |
+| `-y, --yes`         | Skip confirmation prompt for non-interactive / CI runs     |
+| `-h, --help`        | Show help message                                          |
 
 ### Co-Authored-by Options
 
@@ -128,7 +127,7 @@ go build .
   https://codeberg.org/user/repo.git \
   -f "OldName" \
   -t myuser@noreply.codeberg.org \
-  --sign-mode gpg --gpg-key ABCD1234
+  --gpg ABCD1234
 ```
 
 **With SSH re-signing:**
@@ -138,7 +137,7 @@ go build .
   https://codeberg.org/user/repo.git \
   -f "OldName" \
   -t myuser@noreply.codeberg.org \
-  --sign-mode ssh --ssh-key ~/.ssh/id_ed25519
+  --ssh ~/.ssh/id_ed25519
 ```
 
 **Multiple old author names:**

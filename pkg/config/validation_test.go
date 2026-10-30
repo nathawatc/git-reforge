@@ -26,6 +26,61 @@ func TestValidateDefaultsSignMode(t *testing.T) {
 	}
 }
 
+func TestValidateInfersSignModeFromGPGKey(t *testing.T) {
+	cfg := validConfig()
+	cfg.SignMode = ""
+	cfg.GPGKey = "ABCD1234"
+
+	if err := Validate(cfg); err != nil {
+		t.Fatalf("Validate() error = %v", err)
+	}
+	if cfg.SignMode != "gpg" {
+		t.Fatalf("SignMode = %q want gpg", cfg.SignMode)
+	}
+}
+
+func TestValidateInfersSignModeFromSSHKey(t *testing.T) {
+	cfg := validConfig()
+	cfg.SignMode = ""
+	cfg.SSHKey = "/path/to/key"
+
+	if err := Validate(cfg); err != nil {
+		t.Fatalf("Validate() error = %v", err)
+	}
+	if cfg.SignMode != "ssh" {
+		t.Fatalf("SignMode = %q want ssh", cfg.SignMode)
+	}
+}
+
+func TestValidateRejectsConflictingSigningOptions(t *testing.T) {
+	t.Run("both gpg and ssh", func(t *testing.T) {
+		cfg := validConfig()
+		cfg.GPGKey = "ABCD"
+		cfg.SSHKey = "/path"
+		if err := Validate(cfg); err == nil {
+			t.Fatal("Validate() error = nil want error for both gpg and ssh")
+		}
+	})
+
+	t.Run("no-sign with gpg", func(t *testing.T) {
+		cfg := validConfig()
+		cfg.SignMode = "none"
+		cfg.GPGKey = "ABCD"
+		if err := Validate(cfg); err == nil {
+			t.Fatal("Validate() error = nil want error for no-sign with gpg")
+		}
+	})
+
+	t.Run("no-sign with ssh", func(t *testing.T) {
+		cfg := validConfig()
+		cfg.SignMode = "none"
+		cfg.SSHKey = "/path"
+		if err := Validate(cfg); err == nil {
+			t.Fatal("Validate() error = nil want error for no-sign with ssh")
+		}
+	})
+}
+
 func TestValidateSaveDirWithoutDestImpliesNoPush(t *testing.T) {
 	cfg := validConfig()
 	cfg.DestURL = ""

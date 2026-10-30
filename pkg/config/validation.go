@@ -52,16 +52,30 @@ func Validate(cfg *Config) error {
 		return fmt.Errorf("empty string is not a valid old author name (-f, --from)")
 	}
 
+	if cfg.GPGKey != "" && cfg.SSHKey != "" {
+		return fmt.Errorf("cannot use both --gpg and --ssh")
+	}
+
+	if cfg.SignMode == "none" && (cfg.GPGKey != "" || cfg.SSHKey != "") {
+		return fmt.Errorf("cannot combine --no-sign with --gpg or --ssh")
+	}
+
 	if cfg.SignMode == "" {
-		cfg.SignMode = "keep"
+		if cfg.GPGKey != "" {
+			cfg.SignMode = "gpg"
+		} else if cfg.SSHKey != "" {
+			cfg.SignMode = "ssh"
+		} else {
+			cfg.SignMode = "keep"
+		}
 	}
 
 	if cfg.SignMode == "gpg" && cfg.GPGKey == "" {
-		return fmt.Errorf("GPG key is required when using --sign-mode=gpg (--gpg-key)")
+		return fmt.Errorf("GPG key is required (--gpg)")
 	}
 
 	if cfg.SignMode == "ssh" && cfg.SSHKey == "" {
-		return fmt.Errorf("SSH key path is required when using --sign-mode=ssh (--ssh-key)")
+		return fmt.Errorf("SSH key path is required (--ssh)")
 	}
 
 	if !slices.Contains([]string{"keep", "gpg", "ssh", "none"}, cfg.SignMode) {
