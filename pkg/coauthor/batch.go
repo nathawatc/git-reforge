@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"strings"
 
 	"git-reforge/pkg/config"
@@ -69,57 +70,53 @@ func parseCoauthorTargets(cfg *config.Config) []coauthorTarget {
 func rewriteBatchFilterRepo(cfg *config.Config) error {
 	log := cfg.Logger
 	targets := parseCoauthorTargets(cfg)
-	dataFile := filepath.Join(cfg.TempDir, "filter_coauthor_batch.json")
-	data := map[string]any{
-		"targets":   targets,
-		"new_name":  cfg.CoauthorNewName,
-		"new_email": cfg.CoauthorNewEmail,
-		"mode":      cfg.CoauthorMode,
+	if len(targets) == 0 {
+		return nil
 	}
-	b, err := json.Marshal(data)
-	if err != nil {
+
+	var lines []string
+	switch cfg.CoauthorMode {
+	case "remove":
+		for _, t := range targets {
+			pattern := coauthorRegexPattern(t)
+			lines = append(lines, "regex:(?m)"+pattern+"(\\r?\\n)?==>")
+		}
+	case "rewrite":
+		replacement := "Co-authored-by: " + cfg.CoauthorNewName + " <" + cfg.CoauthorNewEmail + ">"
+		for _, t := range targets {
+			pattern := coauthorRegexPattern(t)
+			lines = append(lines, "regex:(?m)"+pattern+"==>"+replacement)
+		}
+	}
+
+	if len(lines) == 0 {
+		return nil
+	}
+
+	replacePath := filepath.Join(cfg.TempDir, "replace_coauthor.txt")
+	content := strings.Join(lines, "\n") + "\n"
+	if err := os.WriteFile(replacePath, []byte(content), 0644); err != nil {
 		return err
 	}
-	if err := os.WriteFile(dataFile, b, 0644); err != nil {
-		return err
-	}
 
-	pyCallback := fmt.Sprintf(`import re, json
-with open(%q, 'r', encoding='utf-8') as f:
-    cfg = json.load(f)
-
-targets = cfg.get('targets', [])
-new_name = cfg.get('new_name', '')
-new_email = cfg.get('new_email', '')
-mode = cfg.get('mode', '')
-
-patterns = []
-for t in targets:
-    if t.get('name') and t.get('email'):
-        patterns.append(r"(?m)^Co-authored-by: " + re.escape(t['name']) + r" <" + re.escape(t['email']) + r">\r?$\n?")
-    elif t.get('email'):
-        patterns.append(r"(?m)^Co-authored-by: [^<\r\n]*<" + re.escape(t['email']) + r">\r?$\n?")
-    else:
-        patterns.append(r"(?m)^Co-authored-by: " + re.escape(t['name']) + r" <[^>\r\n]*>\r?$\n?")
-
-if mode == "remove":
-    for p in patterns:
-        commit.message = re.sub(p.encode('utf-8'), b"", commit.message)
-    if commit.message:
-        commit.message = commit.message.rstrip(b'\n') + b'\n'
-elif mode == "rewrite":
-    replacement = ("Co-authored-by: " + new_name + " <" + new_email + ">\n").encode('utf-8')
-    for p in patterns:
-        commit.message = re.sub(p.encode('utf-8'), replacement, commit.message)
-`, dataFile)
-
-	cmd := exec.Command("git", "filter-repo", "--force", "--commit-callback", pyCallback)
+	cmd := exec.Command("git", "filter-repo", "--force", "--replace-message", replacePath)
 	cmd.Dir = cfg.WorkDir()
 	if err := shell.RunCommand(cmd, "git-filter-repo coauthor batch"); err != nil {
 		return err
 	}
 	log.Success("Co-authored-by trailers updated")
 	return nil
+}
+
+func coauthorRegexPattern(t coauthorTarget) string {
+	switch {
+	case t.Name != "" && t.Email != "":
+		return `^Co-authored-by:\s*` + regexp.QuoteMeta(t.Name) + `\s*<` + regexp.QuoteMeta(t.Email) + `>`
+	case t.Email != "":
+		return `^Co-authored-by:[^<\r\n]*<` + regexp.QuoteMeta(t.Email) + `>`
+	default:
+		return `^Co-authored-by:\s*` + regexp.QuoteMeta(t.Name) + `(\s*<[^>\r\n]*>)?`
+	}
 }
 
 func rewriteInteractiveFilterRepo(cfg *config.Config) error {
