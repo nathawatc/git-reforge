@@ -3,7 +3,6 @@ package coauthor
 import (
 	"encoding/json"
 	"fmt"
-	"net/mail"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -94,8 +93,8 @@ func parseCoauthorTargets(cfg *config.Config) []coauthorTarget {
 		if raw == "" {
 			continue
 		}
-		if addr, err := mail.ParseAddress(raw); err == nil && addr.Address != "" {
-			targets = append(targets, coauthorTarget{Name: addr.Name, Email: addr.Address})
+		if name, email, err := config.ParseAuthor(raw); err == nil && email != "" {
+			targets = append(targets, coauthorTarget{Name: name, Email: email})
 		} else {
 			targets = append(targets, coauthorTarget{Name: raw, Email: ""})
 		}
