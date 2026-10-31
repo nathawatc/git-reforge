@@ -1,7 +1,9 @@
 package migration
 
 import (
+	"fmt"
 	"os"
+	"strings"
 
 	"git-reforge/pkg/coauthor"
 	"git-reforge/pkg/config"
@@ -20,6 +22,19 @@ func Run(cfg *config.Config) (retErr error) {
 
 	if err := git.Clone(cfg); err != nil {
 		return err
+	}
+
+	if git.RepoObjectFormat(cfg.WorkDir()) == "sha256" && strings.Contains(cfg.DestURL, "github.com") {
+		proceed, err := ui.PromptConvertToSHA1(cfg)
+		if err != nil {
+			return err
+		}
+		if !proceed {
+			return fmt.Errorf("migration cancelled: sha256 to sha1 conversion was declined")
+		}
+		if err := git.ConvertToSHA1(cfg); err != nil {
+			return err
+		}
 	}
 
 	if cfg.Interactive {
@@ -54,6 +69,18 @@ func Run(cfg *config.Config) (retErr error) {
 
 	if !cfg.NoPush {
 		if err := git.Push(cfg); err != nil {
+			if git.IsHashAlgorithmError(err) && git.RepoObjectFormat(cfg.WorkDir()) == "sha256" {
+				proceed, promptErr := ui.PromptConvertToSHA1(cfg)
+				if promptErr == nil && proceed {
+					if convErr := git.ConvertToSHA1(cfg); convErr == nil {
+						if retryErr := git.Push(cfg); retryErr == nil {
+							ui.ShowSummary(cfg)
+							return nil
+						}
+					}
+				}
+				return git.FormatHashAlgorithmError(cfg.SourceURL, "sha256", "sha1")
+			}
 			if saveErr := ui.PromptSaveOrCleanup(cfg, "push"); saveErr != nil {
 				return saveErr
 			}

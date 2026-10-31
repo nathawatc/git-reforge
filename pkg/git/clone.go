@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
+	"sync"
 
 	"git-reforge/pkg/config"
 	"git-reforge/pkg/shell"
@@ -47,10 +48,6 @@ func Clone(cfg *config.Config) error {
 	}
 	if err := checkoutFirstAvailableBranch(workDir); err != nil {
 		return err
-	}
-
-	if RepoObjectFormat(workDir) == "sha256" && strings.Contains(cfg.DestURL, "github.com") {
-		return formatHashAlgorithmError(cfg.SourceURL, "sha256", "sha1")
 	}
 
 	log.Success("Repository cloned successfully")
@@ -190,20 +187,85 @@ func Push(cfg *config.Config) error {
 
 	// Push all branches
 	if err := pushBranches(workDir); err != nil {
-		if isHashAlgorithmError(err) {
-			return formatHashAlgorithmError(cfg.SourceURL, RepoObjectFormat(workDir), "sha1")
+		if IsHashAlgorithmError(err) {
+			return FormatHashAlgorithmError(cfg.SourceURL, RepoObjectFormat(workDir), "sha1")
 		}
 		return fmt.Errorf("failed to push branches: %w", err)
 	}
 
 	// Push tags with explicit refspec
 	if err := pushTags(workDir); err != nil {
-		if isHashAlgorithmError(err) {
-			return formatHashAlgorithmError(cfg.SourceURL, RepoObjectFormat(workDir), "sha1")
+		if IsHashAlgorithmError(err) {
+			return FormatHashAlgorithmError(cfg.SourceURL, RepoObjectFormat(workDir), "sha1")
 		}
 		return fmt.Errorf("failed to push tags: %w", err)
 	}
 
+	return nil
+}
+
+// ConvertToSHA1 converts the repository in workDir from sha256 to sha1 in place.
+func ConvertToSHA1(cfg *config.Config) error {
+	log := cfg.Logger
+	workDir := cfg.WorkDir()
+	log.Info("Converting repository from sha256 to sha1...")
+
+	sha1Temp := filepath.Join(cfg.TempDir, "working_sha1")
+	cmd := exec.Command("git", "init", "--object-format=sha1", sha1Temp)
+	if err := shell.RunCommand(cmd, "init sha1 repository"); err != nil {
+		return fmt.Errorf("failed to initialize sha1 repository: %w", err)
+	}
+
+	exportCmd := exec.Command("git", "fast-export", "--all", "--signed-tags=strip", "--tag-of-filtered-object=rewrite")
+	exportCmd.Dir = workDir
+	importCmd := exec.Command("git", "fast-import")
+	importCmd.Dir = sha1Temp
+
+	reader, writer := io.Pipe()
+	exportCmd.Stdout = writer
+	importCmd.Stdin = reader
+
+	var exportErr, importErr error
+	var wg sync.WaitGroup
+	wg.Add(2)
+
+	go func() {
+		defer wg.Done()
+		defer func() {
+			_ = writer.Close()
+		}()
+		exportErr = exportCmd.Run()
+	}()
+
+	go func() {
+		defer wg.Done()
+		importErr = importCmd.Run()
+	}()
+
+	wg.Wait()
+	if exportErr != nil {
+		return fmt.Errorf("fast-export failed during sha1 conversion: %w", exportErr)
+	}
+	if importErr != nil {
+		return fmt.Errorf("fast-import failed during sha1 conversion: %w", importErr)
+	}
+
+	currBranch := currentBranchName(workDir)
+	if currBranch == "" {
+		currBranch = "main"
+	}
+	checkoutCmd := exec.Command("git", "checkout", currBranch)
+	checkoutCmd.Dir = sha1Temp
+	_ = checkoutCmd.Run()
+
+	if err := os.RemoveAll(workDir); err != nil {
+		return fmt.Errorf("failed to remove sha256 working directory: %w", err)
+	}
+	if err := os.Rename(sha1Temp, workDir); err != nil {
+		return fmt.Errorf("failed to replace working directory with sha1: %w", err)
+	}
+
+	log.Success("Repository successfully converted from sha256 to sha1")
 	return nil
 }
 
@@ -218,7 +280,7 @@ func RepoObjectFormat(workDir string) string {
 	return strings.TrimSpace(string(output))
 }
 
-func isHashAlgorithmError(err error) bool {
+func IsHashAlgorithmError(err error) bool {
 	if err == nil {
 		return false
 	}
@@ -227,7 +289,7 @@ func isHashAlgorithmError(err error) bool {
 		strings.Contains(msg, "repository's hash algorithm")
 }
 
-func formatHashAlgorithmError(sourceURL, srcAlgo, targetAlgo string) error {
+func FormatHashAlgorithmError(sourceURL, srcAlgo, targetAlgo string) error {
 	return fmt.Errorf(
 		"destination repository does not support hash algorithm %s (e.g. GitHub requires %s)\n\n"+
 			"To convert your repository from %s to %s before migrating:\n"+

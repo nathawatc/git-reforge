@@ -509,16 +509,56 @@ func TestRepoObjectFormatAndHashAlgorithmDetection(t *testing.T) {
 	}
 
 	err := fmt.Errorf("fatal: the receiving end does not support this repository's hash algorithm")
-	if !isHashAlgorithmError(err) {
-		t.Error("isHashAlgorithmError(err) = false want true")
+	if !IsHashAlgorithmError(err) {
+		t.Error("IsHashAlgorithmError(err) = false want true")
 	}
 
-	formattedErr := formatHashAlgorithmError("https://codeberg.org/user/repo.git", "sha256", "sha1")
+	formattedErr := FormatHashAlgorithmError("https://codeberg.org/user/repo.git", "sha256", "sha1")
 	if !strings.Contains(formattedErr.Error(), "does not support hash algorithm sha256") {
 		t.Errorf("formatHashAlgorithmError() missing error message: %v", formattedErr)
 	}
 	if !strings.Contains(formattedErr.Error(), "fast-export --all") {
 		t.Errorf("formatHashAlgorithmError() missing fast-export command: %v", formattedErr)
+	}
+}
+
+func TestConvertToSHA1ConvertsInPlace(t *testing.T) {
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skip("git not available")
+	}
+
+	root := t.TempDir()
+	sourceDir := filepath.Join(root, "source")
+	runGit(t, root, "init", "--object-format=sha256", sourceDir)
+	runGit(t, sourceDir, "config", "user.name", "Test")
+	runGit(t, sourceDir, "config", "user.email", "test@example.org")
+	writeFile(t, filepath.Join(sourceDir, "file.txt"), "hello\n")
+	runGit(t, sourceDir, "add", "file.txt")
+	runGit(t, sourceDir, "commit", "-m", "sha256 commit")
+
+	cfg := config.New()
+	cfg.TempDir = root
+	cfg.SourceURL = sourceDir
+	cfg.Logger = testLogger{}
+
+	workDir := cfg.WorkDir()
+	runGit(t, root, "clone", sourceDir, workDir)
+
+	if got := RepoObjectFormat(workDir); got != "sha256" {
+		t.Fatalf("cloned repo format = %q want sha256", got)
+	}
+
+	if err := ConvertToSHA1(cfg); err != nil {
+		t.Fatalf("ConvertToSHA1() error = %v", err)
+	}
+
+	if got := RepoObjectFormat(workDir); got != "sha1" {
+		t.Fatalf("converted repo format = %q want sha1", got)
+	}
+
+	log := runGitOutput(t, workDir, "log", "-1", "--format=%s")
+	if !strings.Contains(log, "sha256 commit") {
+		t.Fatalf("converted repo lost commit: %s", log)
 	}
 }
 

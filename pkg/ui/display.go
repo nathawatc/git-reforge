@@ -283,3 +283,33 @@ func promptSavePath(cfg *config.Config, prompts *PromptSession) error {
 		return nil
 	}
 }
+
+// PromptConvertToSHA1 asks the user whether to convert a sha256 repository to sha1.
+func PromptConvertToSHA1(cfg *config.Config) (bool, error) {
+	if cfg.Yes {
+		return true, nil
+	}
+
+	prompts := NewPromptSession()
+	defer func() {
+		_ = prompts.Close()
+	}()
+
+	if !prompts.HasTTY() {
+		return false, fmt.Errorf("source repository uses sha256 but destination requires sha1 (no terminal available; use -y to auto-convert)")
+	}
+
+	if _, err := prompts.Printf(
+		"\n  %sNotice:%s Source repository uses %ssha256%s, but destination requires %ssha1%s (e.g. GitHub).\n",
+		Yellow, NC, Bold, NC, Bold, NC,
+	); err != nil {
+		return false, err
+	}
+
+	reply, err := prompts.ReadLine("  Convert repository from sha256 to sha1? [y/N] ")
+	if err != nil {
+		return false, fmt.Errorf("failed to read sha1 conversion choice: %w", err)
+	}
+
+	return strings.EqualFold(strings.TrimSpace(reply), "Y"), nil
+}
