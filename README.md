@@ -37,7 +37,7 @@ migrate seamlessly across Git forges (GitHub, Codeberg, Forgejo, GitLab).
 ## Installation
 
 ```bash
-git clone https://codeberg.org/nathawat/git-reforge.git
+git clone https://github.com/nathawatc/git-reforge.git
 cd git-reforge
 go build .
 ```
