@@ -239,6 +239,9 @@ func ConvertToSHA1(cfg *config.Config) error {
 
 	go func() {
 		defer wg.Done()
+		defer func() {
+			_ = reader.Close()
+		}()
 		importErr = importCmd.Run()
 	}()
 
