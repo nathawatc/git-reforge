@@ -1,6 +1,7 @@
 package git
 
 import (
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -486,6 +487,38 @@ func TestCommitDetailsExtractsAllFields(t *testing.T) {
 	}
 	if !strings.Contains(info.Body, "Body line 1") {
 		t.Errorf("Body = %q want to contain 'Body line 1'", info.Body)
+	}
+}
+
+func TestRepoObjectFormatAndHashAlgorithmDetection(t *testing.T) {
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skip("git not available")
+	}
+
+	root := t.TempDir()
+	sha1Dir := filepath.Join(root, "sha1_repo")
+	runGit(t, root, "init", "--object-format=sha1", sha1Dir)
+	if got := RepoObjectFormat(sha1Dir); got != "sha1" {
+		t.Errorf("RepoObjectFormat(sha1Dir) = %q want sha1", got)
+	}
+
+	sha256Dir := filepath.Join(root, "sha256_repo")
+	runGit(t, root, "init", "--object-format=sha256", sha256Dir)
+	if got := RepoObjectFormat(sha256Dir); got != "sha256" {
+		t.Errorf("RepoObjectFormat(sha256Dir) = %q want sha256", got)
+	}
+
+	err := fmt.Errorf("fatal: the receiving end does not support this repository's hash algorithm")
+	if !isHashAlgorithmError(err) {
+		t.Error("isHashAlgorithmError(err) = false want true")
+	}
+
+	formattedErr := formatHashAlgorithmError("https://codeberg.org/user/repo.git", "sha256", "sha1")
+	if !strings.Contains(formattedErr.Error(), "does not support hash algorithm sha256") {
+		t.Errorf("formatHashAlgorithmError() missing error message: %v", formattedErr)
+	}
+	if !strings.Contains(formattedErr.Error(), "fast-export --all") {
+		t.Errorf("formatHashAlgorithmError() missing fast-export command: %v", formattedErr)
 	}
 }
 

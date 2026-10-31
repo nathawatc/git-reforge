@@ -49,6 +49,10 @@ func Clone(cfg *config.Config) error {
 		return err
 	}
 
+	if RepoObjectFormat(workDir) == "sha256" && strings.Contains(cfg.DestURL, "github.com") {
+		return formatHashAlgorithmError(cfg.SourceURL, "sha256", "sha1")
+	}
+
 	log.Success("Repository cloned successfully")
 	cloneSucceeded = true
 	return nil
@@ -186,15 +190,56 @@ func Push(cfg *config.Config) error {
 
 	// Push all branches
 	if err := pushBranches(workDir); err != nil {
+		if isHashAlgorithmError(err) {
+			return formatHashAlgorithmError(cfg.SourceURL, RepoObjectFormat(workDir), "sha1")
+		}
 		return fmt.Errorf("failed to push branches: %w", err)
 	}
 
 	// Push tags with explicit refspec
 	if err := pushTags(workDir); err != nil {
+		if isHashAlgorithmError(err) {
+			return formatHashAlgorithmError(cfg.SourceURL, RepoObjectFormat(workDir), "sha1")
+		}
 		return fmt.Errorf("failed to push tags: %w", err)
 	}
 
 	return nil
+}
+
+// RepoObjectFormat returns the hash algorithm used by the repository ("sha1" or "sha256").
+func RepoObjectFormat(workDir string) string {
+	cmd := exec.Command("git", "rev-parse", "--show-object-format")
+	cmd.Dir = workDir
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		return "sha1"
+	}
+	return strings.TrimSpace(string(output))
+}
+
+func isHashAlgorithmError(err error) bool {
+	if err == nil {
+		return false
+	}
+	msg := err.Error()
+	return strings.Contains(msg, "does not support this repository's hash algorithm") ||
+		strings.Contains(msg, "repository's hash algorithm")
+}
+
+func formatHashAlgorithmError(sourceURL, srcAlgo, targetAlgo string) error {
+	return fmt.Errorf(
+		"destination repository does not support hash algorithm %s (e.g. GitHub requires %s)\n\n"+
+			"To convert your repository from %s to %s before migrating:\n"+
+			"  1. git clone %s repo-%s\n"+
+			"  2. git init --object-format=%s repo-%s\n"+
+			"  3. git -C repo-%s fast-export --all --signed-tags=strip --tag-of-filtered-object=rewrite | git -C repo-%s fast-import\n"+
+			"  4. git -C repo-%s checkout main\n"+
+			"  5. Run git-reforge on repo-%s",
+		srcAlgo, targetAlgo, srcAlgo, targetAlgo,
+		sourceURL, srcAlgo, targetAlgo, targetAlgo,
+		srcAlgo, targetAlgo, targetAlgo, targetAlgo,
+	)
 }
 
 func pushBranches(workDir string) error {
